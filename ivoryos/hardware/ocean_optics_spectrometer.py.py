@@ -15,7 +15,7 @@ class OceanOpticsSpectrometer:
             # 1. Busca los aparatos conectados por USB
             devices = sb.list_devices()
             if not devices:
-                raise Exception("No se ha encontrado ningun espectrofotometro conectado!")
+            raise Exception("No se ha encontrado ningun espectrofotometro conectado!")
 
             # 2. Conecta con el primer aparato que encuentre
             self.spectrometer = sb.Spectrometer(devices[0])
