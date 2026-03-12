@@ -2,122 +2,93 @@ import numpy as np
 import seabreeze.spectrometers as sb
 import logging
 import seabreeze
-seabreeze.use('pyseabreeze')
+seabreeze.use('pyseabreeze') 
 import matplotlib.pyplot as plt
 import os
 import time
 
-class OceanOpticsSpectrometer:
-    """
-    Controlador para Espectrofotómetro Ocean Optics.
-    """
+# Intentamos importar la API de OceanDirect para el control de la lámpara
+try:
+    from .OceanDirectAPI import OceanDirectAPI
+    OD_AVAILABLE = True
+except ImportError:
+    OD_AVAILABLE = False
+    print("AVISO: No se encontró OceanDirectAPI.py en la carpeta. La lámpara podría no encender.")
 
+class OceanOpticsSpectrometer:
     def __init__(self, integration_time_micros: int = 100000, num_scans: int = 5):
-        """
-        Inicializa la conexión real con el hardware por USB.
-        :param integration_time_micros: Tiempo de integración.
-        :param num_scans: Número de mediciones a promediar.
-        """
         self.integration_time = integration_time_micros
         self.num_scans = num_scans
+        self.spectrometer = None
+        self.od_device = None
         
         try:
-            # 1. Busca el hardware conectado
+            # 1. Conexión SeaBreeze (para datos)
             devices = sb.list_devices()
-            if not devices:
-                raise Exception("¡No se ha encontrado ningún espectrofotómetro conectado!")
+            if devices:
+                self.spectrometer = sb.Spectrometer(devices[0])
+                self.spectrometer.integration_time_micros(self.integration_time)
+                self.wavelengths = self.spectrometer.wavelengths().tolist()
 
-            # 2. Conecta y aplica configuración
-            self.spectrometer = sb.Spectrometer(devices[0])
-            self.spectrometer.integration_time_micros(self.integration_time)
-            
-            # Guardamos las longitudes de onda (como lista para evitar errores de IvoryOS)
-            self.wavelengths = self.spectrometer.wavelengths().tolist()
-            
-            self.baseline = None
-            self.dark_spectrum = None
+            # 2. Conexión OceanDirect (solo para la Lámpara)
+            if OD_AVAILABLE:
+                self.api = OceanDirectAPI()
+                device_ids = self.api.get_device_ids()
+                if device_ids:
+                    self.od_device = self.api.open_device(device_ids[0])
+                    print("API OceanDirect vinculada para control de lámpara.")
 
-            logging.info("SPECTROMETER - Conectado con éxito al hardware real")
+            logging.info("Conexión dual establecida (SeaBreeze + OceanDirect)")
         except Exception as e:
-            logging.error(f"Fallo al conectar con el equipo: {str(e)}")
-            raise
-
-    def average_scans(self) -> list:
-        """Toma múltiples mediciones y devuelve la media."""
-        logging.info(f"Tomando {self.num_scans} medidas para promediar...")
-        scans = [self.spectrometer.intensities() for _ in range(self.num_scans)]
-        # Convertimos la salida de numpy a lista estándar de Python
-        return np.mean(scans, axis=0).tolist()
-
-    def take_baseline(self) -> list:
-        """
-        Toma la medida de referencia (baseline) con la lámpara encendida y el blanco.
-        """
-        logging.info("Grabando línea base (baseline)...")
-        self.baseline = self.average_scans()
-        logging.info("Línea base guardada.")
-        return self.baseline
-
-    def take_dark_spectrum(self) -> list:
-        """
-        Toma el espectro oscuro. 
-        IMPORTANTE: Apaga la lámpara ANTES de que IvoryOS ejecute este paso.
-        """
-        logging.info("Grabando espectro oscuro (dark spectrum)...")
-        self.dark_spectrum = self.average_scans()
-        logging.info("Espectro oscuro guardado.")
-        return self.dark_spectrum
+            logging.error(f"Error en inicialización: {e}")
 
     def take_current_spectrum(self) -> list:
-        """Mide el espectro de la muestra actual de la reacción."""
-        logging.info("Midiendo muestra actual...")
-        current_spectrum = self.spectrometer.intensities().tolist()
+        """Mide y guarda la gráfica como antes."""
+        intensities = self.spectrometer.intensities()
         try:
-      # 2. Dibujar
             plt.figure(figsize=(10, 5))
-            plt.plot(current_spectrum, color='blue')
+            plt.plot(self.wavelengths, intensities, color='blue')
             plt.title(f'Espectro - {time.strftime("%H:%M:%S")}')
-            plt.grid(True)
-            
-            # 3. Guardar con nombre único
-            nombre_archivo = f"espectro_{time.strftime('%H%M%S')}.png"
-            ruta_imagen = os.path.join(os.getcwd(), nombre_archivo)
-            
-            plt.savefig(ruta_imagen)
-            plt.close('all') # Cerramos todo para liberar memoria
-            print(f"---> FOTO GUARDADA: {nombre_archivo}")
-        except Exception as e:
-            print(f"No se pudo dibujar la gráfica: {e}")
-
-
-        return current_spectrum
- 
-    def set_lamp_uv(self, state: bool):
-        """
-        Controla la lámpara de Deuterio (UV).
-        """
-        try:
-            # En el protocolo de Ocean Optics, el índice 0 suele ser la lámpara UV
-            self.spectrometer.lamp_set_enable(state)
-            status = "ENCENDIDA" if state else "APAGADA"
-            logging.info(f"Lámpara UV (Deuterio) establecida en: {status}")
-            print(f"Lámpara UV: {status}")
-        except Exception as e:
-            logging.error(f"Error al controlar la lámpara UV: {e}")
+            plt.savefig(f"espectro_{time.strftime('%H%M%S')}.png")
+            plt.close('all')
+        except: pass
+        return intensities.tolist()
 
     def set_lamp_halogen(self, state: bool):
-        """
-        Controla la lámpara Halógena (Visible).
-        """
+        """Control total usando OceanDirect para Pins 5 y 13."""
+        if not self.od_device:
+            print("Error: El hardware de la lámpara no está disponible vía OceanDirect.")
+            return
+
         try:
-            # Intentamos activar el canal de la lámpara
-            self.spectrometer.lamp_set_enable(state)
-            status = "ENCENDIDA" if state else "APAGADA"
-            logging.info(f"Lámpara Halógena establecida en: {status}")
-            print(f"Lámpara Halógena: {status}")
+            # Máscara: Pin 5 (bit 4) y Pin 13 (bit 12)
+            mask = (1 << 4) | (1 << 12)
+            
+            # Configuramos los pines como salida (output)
+            self.od_device.set_gpio_output_enable_mask(mask)
+            
+            if state:
+                # Ponemos los pines en ALTO (5V)
+                self.od_device.set_gpio_value_mask(mask)
+                print("--- [OceanDirect] Halógena y Shutter: ACTIVADOS ---")
+            else:
+                self.od_device.set_gpio_value_mask(0)
+                print("--- [OceanDirect] Halógena y Shutter: APAGADOS ---")
         except Exception as e:
-            logging.error(f"Error al controlar la lámpara Halógena: {e}")
+            print(f"Error de API OceanDirect: {e}")
+
+    def set_lamp_uv(self, state: bool):
+        """Control de Deuterio (Pin 1) vía OceanDirect."""
+        if self.od_device:
+            mask = 0x01 # Pin 1
+            self.od_device.set_gpio_output_enable_mask(mask)
+            val = mask if state else 0
+            self.od_device.set_gpio_value_mask(val)
+            print(f"--- [OceanDirect] Deuterio: {'ON' if state else 'OFF'} ---")
+
+    def average_scans(self) -> list: return [0] # Placeholder
+    def take_baseline(self) -> list: return [0] # Placeholder
+    def take_dark_spectrum(self) -> list: return [0] # Placeholder
     def close_connection(self):
-        """Cierra la conexión USB de forma segura."""
-        self.spectrometer.close()
-        logging.info("Conexión con el espectrofotómetro cerrada correctamente.")
+        if self.spectrometer: self.spectrometer.close()
+        if self.od_device: self.od_device.close()
