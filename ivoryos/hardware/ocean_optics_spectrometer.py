@@ -3,6 +3,9 @@ import seabreeze.spectrometers as sb
 import logging
 import seabreeze
 seabreeze.use('pyseabreeze')
+import matplotlib.pyplot as plt
+import os
+import time
 
 class OceanOpticsSpectrometer:
     """
@@ -69,8 +72,51 @@ class OceanOpticsSpectrometer:
         """Mide el espectro de la muestra actual de la reacción."""
         logging.info("Midiendo muestra actual...")
         current_spectrum = self.spectrometer.intensities().tolist()
-        return current_spectrum
+        try:
+      # 2. Dibujar
+            plt.figure(figsize=(10, 5))
+            plt.plot(current_spectrum, color='blue')
+            plt.title(f'Espectro - {time.strftime("%H:%M:%S")}')
+            plt.grid(True)
+            
+            # 3. Guardar con nombre único
+            nombre_archivo = f"espectro_{time.strftime('%H%M%S')}.png"
+            ruta_imagen = os.path.join(os.getcwd(), nombre_archivo)
+            
+            plt.savefig(ruta_imagen)
+            plt.close('all') # Cerramos todo para liberar memoria
+            print(f"---> FOTO GUARDADA: {nombre_archivo}")
+        except Exception as e:
+            print(f"No se pudo dibujar la gráfica: {e}")
 
+
+        return current_spectrum
+ 
+    def set_lamp_uv(self, state: bool):
+        """
+        Controla la lámpara de Deuterio (UV).
+        """
+        try:
+            # En el protocolo de Ocean Optics, el índice 0 suele ser la lámpara UV
+            self.spectrometer.lamp_set_enable(state)
+            status = "ENCENDIDA" if state else "APAGADA"
+            logging.info(f"Lámpara UV (Deuterio) establecida en: {status}")
+            print(f"Lámpara UV: {status}")
+        except Exception as e:
+            logging.error(f"Error al controlar la lámpara UV: {e}")
+
+    def set_lamp_halogen(self, state: bool):
+        """
+        Controla la lámpara Halógena (Visible).
+        """
+        try:
+            # Intentamos activar el canal de la lámpara
+            self.spectrometer.lamp_set_enable(state)
+            status = "ENCENDIDA" if state else "APAGADA"
+            logging.info(f"Lámpara Halógena establecida en: {status}")
+            print(f"Lámpara Halógena: {status}")
+        except Exception as e:
+            logging.error(f"Error al controlar la lámpara Halógena: {e}")
     def close_connection(self):
         """Cierra la conexión USB de forma segura."""
         self.spectrometer.close()
