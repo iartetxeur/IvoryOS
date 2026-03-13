@@ -6,6 +6,7 @@ seabreeze.use('pyseabreeze')
 import matplotlib.pyplot as plt
 import os
 import time
+import csv
 
 class OceanOpticsSpectrometer:
     """
@@ -67,30 +68,50 @@ class OceanOpticsSpectrometer:
         self.dark_spectrum = self.average_scans()
         logging.info("Espectro oscuro guardado.")
         return self.dark_spectrum
-
     def take_current_spectrum(self) -> list:
-        """Mide el espectro de la muestra actual de la reacción."""
-        logging.info("Midiendo muestra actual...")
-        current_spectrum = self.spectrometer.intensities().tolist()
+        """Mide, dibuja y crea el CSV científico en la carpeta del experimento."""
+        intensities = self.spectrometer.intensities().tolist()
+        
+        # 1. TRUCO INFALIBLE: Buscar la carpeta más reciente que ha creado IvoryOS en 'results'
+        base_dir = os.path.join(os.getcwd(), 'ivoryos_data', 'results')
+        os.makedirs(base_dir, exist_ok=True) # Por si acaso
+        
+        carpetas = [os.path.join(base_dir, d) for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
+        
+        if carpetas:
+            target_dir = max(carpetas, key=os.path.getmtime) # Coge la última carpeta creada
+        else:
+            target_dir = base_dir
+
+        file_time = time.strftime('%H-%M-%S')
+        
+        # 2. GUARDAR LA FOTO (.png) EN LA CARPETA
         try:
-      # 2. Dibujar
             plt.figure(figsize=(10, 5))
-            plt.plot(current_spectrum, color='blue')
-            plt.title(f'Espectro - {time.strftime("%H:%M:%S")}')
+            plt.plot(self.wavelengths, intensities, color='blue')
+            plt.title(f'Espectro - {file_time}')
+            plt.xlabel('Longitud de onda (nm)')
+            plt.ylabel('Intensidad')
             plt.grid(True)
-            
-            # 3. Guardar con nombre único
-            nombre_archivo = f"espectro_{time.strftime('%H%M%S')}.png"
-            ruta_imagen = os.path.join(os.getcwd(), nombre_archivo)
-            
-            plt.savefig(ruta_imagen)
-            plt.close('all') # Cerramos todo para liberar memoria
-            print(f"---> FOTO GUARDADA: {nombre_archivo}")
+            png_path = os.path.join(target_dir, f"grafica_{file_time}.png")
+            plt.savefig(png_path)
+            plt.close('all')
         except Exception as e:
-            print(f"No se pudo dibujar la gráfica: {e}")
+            print(f"Error al guardar gráfica: {e}")
 
+        # 3. GUARDAR LOS DATOS REALES EN UN CSV CIENTÍFICO EN LA CARPETA
+        try:
+            csv_path = os.path.join(target_dir, f"datos_raw_{file_time}.csv")
+            with open(csv_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Wavelength (nm)', 'Intensity'])
+                for w, i in zip(self.wavelengths, intensities):
+                    writer.writerow([w, i])
+            print(f"\n---> ¡ÉXITO! FOTO Y DATOS RAW GUARDADOS EN: {target_dir} <---")
+        except Exception as e:
+            print(f"Error al guardar CSV raw: {e}")
 
-        return current_spectrum
+        return intensities
     def close_connection(self):
         """Cierra la conexión USB de forma segura."""
         self.spectrometer.close()

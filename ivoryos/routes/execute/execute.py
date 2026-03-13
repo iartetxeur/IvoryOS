@@ -3,7 +3,7 @@ import os
 import time
 import importlib
 
-from flask import Blueprint, redirect, url_for, flash, jsonify, request, render_template, session, \
+from flask import Blueprint, logging, redirect, url_for, flash, jsonify, request, render_template, session, \
     current_app, g, send_file
 from flask_login import login_required
 
@@ -134,12 +134,16 @@ def experiment_run():
                 pass
 
 
-    data_list = [f for f in os.listdir(current_app.config['DATA_FOLDER']) if f.endswith('.csv')]
-    # Remove .gitkeep if present
-    if ".gitkeep" in data_list:
-        data_list.remove(".gitkeep")
+# NUEVO: Buscar CSVs dentro de las nuevas subcarpetas de los experimentos
+    data_list = []
+    for root, _, files_in_dir in os.walk(current_app.config['DATA_FOLDER']):
+        for f in files_in_dir:
+            if f.endswith('.csv') and f != ".gitkeep":
+                # Ruta relativa para que Flask lo entienda
+                rel_path = os.path.relpath(os.path.join(root, f), current_app.config['DATA_FOLDER'])
+                data_list.append(rel_path.replace('\\', '/'))
 
-    # Sort by creation time, newest first
+    # Ordenar por fecha de creación
     data_list.sort(key=lambda f: os.path.getctime(os.path.join(current_app.config['DATA_FOLDER'], f)), reverse=True)
 
     if deck is None:
@@ -179,37 +183,41 @@ def experiment_run():
             batch_size = int(request.form.get('batch_size', 1))
             repeat = request.form.get('repeat', None)
 
-        try:
-        # if True:
-            datapath = current_app.config["DATA_FOLDER"]
-            run_name = script.validate_function_name(run_name)
-            
-            socketio_instance = g.socketio
-            def on_start_callback():
-                # This runs inside the thread with app context pushed
-                snapshot = global_config.deck_snapshot
-                line_collection = script.render_nested_script_lines(script.script_dict, snapshot=snapshot)
-                progress_panel_html = render_template('components/progress_panel.html', line_collection=line_collection)
-                socketio_instance.emit('start_task', {
-                    'run_name': run_name,
-                    'progress_panel_html': progress_panel_html
-                })
+    try:
+        base_datapath = current_app.config["DATA_FOLDER"]
+        run_name = script.validate_function_name(run_name)
+        
+        # 1. Crear nombre de carpeta SEGURO
+        timestamp = time.strftime('%Y-%m-%d_%H-%M-%S')
+        exp_folder_name = f"{run_name}_{timestamp}"
+        datapath = os.path.join(base_datapath, exp_folder_name)
+        
+        # 2. Crear la carpeta física
+        os.makedirs(datapath, exist_ok=True)
+        
+        logging.info(f"Nueva carpeta de experimento: {datapath}")
+        
+        socketio_instance = g.socketio
+        def on_start_callback():
+            snapshot = global_config.deck_snapshot
+            line_collection = script.render_nested_script_lines(script.script_dict, snapshot=snapshot)
+            progress_panel_html = render_template('components/progress_panel.html', line_collection=line_collection)
+            socketio_instance.emit('start_task', {
+                'run_name': run_name,
+                'progress_panel_html': progress_panel_html
+            })
 
-            result = runner.run_script(script=script, run_name=run_name, config=config,
-                              logger=g.logger, socketio=g.socketio, repeat_count=repeat,
-                              output_path=datapath, compiled=compiled, history=existing_data,
-                              current_app=current_app._get_current_object(), batch_size=batch_size,
-                              on_start=on_start_callback, display_name=display_name
-                              )
+        # 3. EJECUTAR (NÓTESE QUE OUTPUT_PATH ES LA NUEVA CARPETA)
+        result = runner.run_script(script=script, run_name=run_name, config=config,
+                          logger=g.logger, socketio=g.socketio, repeat_count=repeat,
+                          output_path=datapath, compiled=compiled, history=existing_data,
+                          current_app=current_app._get_current_object(), batch_size=batch_size,
+                          on_start=on_start_callback, display_name=display_name
+                          )
 
-            # remove queue flash, handled in html/js
-            # if result == "queued":
-            #     flash(f"System busy. Task {run_name} added to queue.", "popup")
-            # else:
-            #     flash(f"Task '{run_name}' started.")
-            if utils.check_config_duplicate(config):
-                flash(f"WARNING: Duplicate in config entries.")
-        except Exception as e:
+        if utils.check_config_duplicate(config):
+            flash(f"WARNING: Duplicate in config entries.")
+    except Exception as e:
             if request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json':
                 return jsonify({"error": e.__str__()})
             else:
@@ -516,7 +524,7 @@ def api_retry():
     return jsonify({"status": "ok, retrying failed step"}), 200
 
 
-@execute.route('/files/preview/<string:filename>')
+@execute.route('/files/preview/<path:filename>')
 @login_required
 def data_preview(filename):
     """
