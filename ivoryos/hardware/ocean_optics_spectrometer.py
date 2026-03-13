@@ -91,32 +91,6 @@ class OceanOpticsSpectrometer:
 
 
         return current_spectrum
- 
-    def set_lamp_uv(self, state: bool):
-        """
-        Controla la lámpara de Deuterio (UV).
-        """
-        try:
-            # En el protocolo de Ocean Optics, el índice 0 suele ser la lámpara UV
-            self.spectrometer.lamp_set_enable(state)
-            status = "ENCENDIDA" if state else "APAGADA"
-            logging.info(f"Lámpara UV (Deuterio) establecida en: {status}")
-            print(f"Lámpara UV: {status}")
-        except Exception as e:
-            logging.error(f"Error al controlar la lámpara UV: {e}")
-
-    def set_lamp_halogen(self, state: bool):
-        """
-        Controla la lámpara Halógena (Visible).
-        """
-        try:
-            # Intentamos activar el canal de la lámpara
-            self.spectrometer.lamp_set_enable(state)
-            status = "ENCENDIDA" if state else "APAGADA"
-            logging.info(f"Lámpara Halógena establecida en: {status}")
-            print(f"Lámpara Halógena: {status}")
-        except Exception as e:
-            logging.error(f"Error al controlar la lámpara Halógena: {e}")
     def close_connection(self):
         """Cierra la conexión USB de forma segura."""
         self.spectrometer.close()
