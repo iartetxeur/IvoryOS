@@ -1,5 +1,6 @@
 import logging
 import time
+from .channel import Channel
 from ismatec import RegloICC as Ismatec
 
 class IsmatecPump:

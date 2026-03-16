@@ -9,8 +9,8 @@ ocean_optics_spectrometer = OceanOpticsSpectrometer(
     num_scans=5
 )
 
-# Inicializamos la bomba con su puerto correspondiente (modifica "COM3" si es necesario)
-bomba_ismatec = IsmatecPump(port="COM3")
+# Inicializamos la bomba con su puerto correspondiente
+bomba_ismatec = IsmatecPump(port="COM7")
 
 if __name__ == "__main__":
     # Arranca la interfaz web con el hardware ya conectado
