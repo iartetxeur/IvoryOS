@@ -3,7 +3,7 @@ import os
 import time
 import importlib
 
-from flask import Blueprint, logging, redirect, url_for, flash, jsonify, request, render_template, session, \
+from flask import Blueprint, redirect, url_for, flash, jsonify, request, render_template, session, \
     current_app, g, send_file
 from flask_login import login_required
 
@@ -13,38 +13,19 @@ from ivoryos.utils.bo_campaign import parse_optimization_form
 from ivoryos.utils.db_models import SingleStep, WorkflowRun, WorkflowStep, WorkflowPhase
 from ivoryos.utils.global_config import GlobalConfig
 from ivoryos.utils.form import create_action_button
-
 from werkzeug.utils import secure_filename
-
 from ivoryos.socket_handlers import runner, retry, pause, abort_pending, abort_current
 
 execute = Blueprint('execute', __name__, template_folder='templates')
-
 execute.register_blueprint(files)
-# Register sub-blueprints
 global_config = GlobalConfig()
-
 
 @execute.route("/executions/config", methods=['GET', 'POST'])
 @login_required
 def experiment_run():
-    """
-    .. :quickref: Workflow Execution Config; Execute/iterate the workflow
-
-    .. http:get:: /executions/config
-
-    Load the experiment execution interface.
-
-    .. http:post:: /executions/config
-
-    Start workflow execution with experiment configuration.
-
-    """
     deck = global_config.deck
     script = utils.get_script_file()
-    # runner = global_config.runner
     existing_data = None
-    # script.sort_actions() # handled in update list
     off_line = current_app.config["OFF_LINE"]
     deck_list = utils.import_history(os.path.join(current_app.config["OUTPUT_FOLDER"], 'deck_history.txt'))
     optimizers_schema = {k: v.get_schema() for k, v in global_config.optimizers.items()}
@@ -71,56 +52,37 @@ def experiment_run():
     if filename:
         config = list(csv.DictReader(open(os.path.join(current_app.config['CSV_FOLDER'], filename))))
         config_preview = config[1:]
-        arg_type = config.pop(0)  # first entry is types
+        arg_type = config.pop(0)
 
     try:
-        # Handle both string and dict exec_string
         if isinstance(exec_string, dict):
-            # import_str = script.get_required_imports()
-            # if import_str:
-            #     compile(import_str, '<imports>', 'exec')
             for key, func_str in exec_string.items():
                 compile(func_str, f'<function_{key}>', 'exec')
-
         else:
             if isinstance(exec_string, str):
                 compile(exec_string, '<script>', 'exec')
-            # Handle string case - you might need to adjust this based on your needs
             line_collection = {}
     except Exception as e:
         g.logger.exception(f"Exception while executing script: {e}")
         flash(f"Please check syntax!! {e}")
         return redirect(url_for("design.experiment_builder"))
 
-
-    # If there is a current task running, use that script for display
-    # otherwise use the current script being configured
-    
     current_lines_script = script
     if runner.current_task and runner.current_task.get("script"):
         current_lines_script = runner.current_task["script"]
         
     line_collection = current_lines_script.render_nested_script_lines(current_lines_script.script_dict, snapshot=snapshot)
-
     run_name = script.name if script.name else "untitled"
-
     dismiss = session.get("dismiss", None)
-    # script = utils.get_script_file() 
     no_deck_warning = False
-
     _, return_list = script.config_return()
     config_list, config_type_list = script.config("script")
 
     for key, type_str in config_type_list.items():
-        # Handle Optional/Union types which come as lists
         if isinstance(type_str, list):
-             # Find the Enum entry if it exists
              enum_entries = [t for t in type_str if isinstance(t, str) and t.startswith("Enum:")]
              if enum_entries:
-                 # Use the first found Enum type
                  type_str = enum_entries[0]
-                 # Update the list in place so template gets the simple string? 
-                 # Or better, just proceed to process it as a string
         
         if isinstance(type_str, str) and type_str.startswith("Enum:"):
             try:
@@ -133,44 +95,35 @@ def experiment_run():
             except Exception:
                 pass
 
-
-# NUEVO: Buscar CSVs dentro de las nuevas subcarpetas de los experimentos
+    # ---> EL FILTRO MAGICO PARA LA WEB: Ignorará la carpeta de "basura" <---
     data_list = []
-    for root, _, files_in_dir in os.walk(current_app.config['DATA_FOLDER']):
+    for root, dirs, files_in_dir in os.walk(current_app.config['DATA_FOLDER']):
         for f in files_in_dir:
             if f.endswith('.csv') and f != ".gitkeep":
-                # Ruta relativa para que Flask lo entienda
-                rel_path = os.path.relpath(os.path.join(root, f), current_app.config['DATA_FOLDER'])
-                data_list.append(rel_path.replace('\\', '/'))
-
-    # Ordenar por fecha de creación
+                # Condición de oro: si la ruta tiene "logs", NO la mostramos
+                if "logs" not in root.split(os.sep):
+                    rel_path = os.path.relpath(os.path.join(root, f), current_app.config['DATA_FOLDER'])
+                    data_list.append(rel_path.replace('\\', '/'))
     data_list.sort(key=lambda f: os.path.getctime(os.path.join(current_app.config['DATA_FOLDER'], f)), reverse=True)
 
     if deck is None:
         no_deck_warning = True
-        flash(f"No deck is found, import {script.deck}")
     elif script.deck:
-        is_deck_match = script.deck == deck.__name__ or script.deck == \
-                        os.path.splitext(os.path.basename(deck.__file__))[0]
+        is_deck_match = script.deck == deck.__name__ or script.deck == os.path.splitext(os.path.basename(deck.__file__))[0]
         if not is_deck_match:
             flash(f"This script is not compatible with current deck, import {script.deck}")
 
     if request.method == "POST":
-        # bo_args = None
         compiled = False
         if request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json':
             payload_json = request.get_json()
             compiled = True
             if "kwargs" in payload_json:
                 config = payload_json["kwargs"]
-            # elif "parameters" in payload_json:
-            #     bo_args = payload_json
             repeat = payload_json.pop("repeat", None)
             batch_size = payload_json.pop('batch_size', 1)
         else:
-            # Extract display name if present
             display_name = request.form.get("display_name")
-            
             if "bo" in request.form:
                 bo_args = request.form.to_dict()
                 existing_data = bo_args.pop("existing_data")
@@ -183,54 +136,50 @@ def experiment_run():
             batch_size = int(request.form.get('batch_size', 1))
             repeat = request.form.get('repeat', None)
 
-    try:
-        base_datapath = current_app.config["DATA_FOLDER"]
-        run_name = script.validate_function_name(run_name)
-        
-        # 1. Crear nombre de carpeta SEGURO
-        timestamp = time.strftime('%Y-%m-%d_%H-%M-%S')
-        exp_folder_name = f"{run_name}_{timestamp}"
-        datapath = os.path.join(base_datapath, exp_folder_name)
-        
-        # 2. Crear la carpeta física
-        os.makedirs(datapath, exist_ok=True)
-        
-        logging.info(f"Nueva carpeta de experimento: {datapath}")
-        
-        socketio_instance = g.socketio
-        def on_start_callback():
-            snapshot = global_config.deck_snapshot
-            line_collection = script.render_nested_script_lines(script.script_dict, snapshot=snapshot)
-            progress_panel_html = render_template('components/progress_panel.html', line_collection=line_collection)
-            socketio_instance.emit('start_task', {
-                'run_name': run_name,
-                'progress_panel_html': progress_panel_html
-            })
+        try:
+            base_datapath = current_app.config["DATA_FOLDER"]
+            run_name = script.validate_function_name(run_name)
+            
+            # 1. Crear carpeta principal para la gráfica y tus datos reales
+            timestamp = time.strftime('%Y-%m-%d_%H-%M-%S')
+            datapath = os.path.join(base_datapath, f"{run_name}_{timestamp}")
+            os.makedirs(datapath, exist_ok=True) 
+            
+            # 2. Crear subcarpeta para tirar la "basura" de IvoryOS
+            log_path = os.path.join(datapath, "logs")
+            os.makedirs(log_path, exist_ok=True)
+            
+            socketio_instance = g.socketio
+            def on_start_callback():
+                snapshot = global_config.deck_snapshot
+                line_collection = script.render_nested_script_lines(script.script_dict, snapshot=snapshot)
+                progress_panel_html = render_template('components/progress_panel.html', line_collection=line_collection)
+                socketio_instance.emit('start_task', {
+                    'run_name': run_name,
+                    'progress_panel_html': progress_panel_html
+                })
 
-        # 3. EJECUTAR (NÓTESE QUE OUTPUT_PATH ES LA NUEVA CARPETA)
-        result = runner.run_script(script=script, run_name=run_name, config=config,
-                          logger=g.logger, socketio=g.socketio, repeat_count=repeat,
-                          output_path=datapath, compiled=compiled, history=existing_data,
-                          current_app=current_app._get_current_object(), batch_size=batch_size,
-                          on_start=on_start_callback, display_name=display_name
-                          )
+            # 3. Le decimos a IvoryOS que guarde su archivo inútil en 'log_path'
+            result = runner.run_script(script=script, run_name=run_name, config=config,
+                              logger=g.logger, socketio=g.socketio, repeat_count=repeat,
+                              output_path=log_path, compiled=compiled, history=existing_data,
+                              current_app=current_app._get_current_object(), batch_size=batch_size,
+                              on_start=on_start_callback, display_name=display_name
+                              )
 
-        if utils.check_config_duplicate(config):
-            flash(f"WARNING: Duplicate in config entries.")
-    except Exception as e:
+            if utils.check_config_duplicate(config):
+                flash(f"WARNING: Duplicate in config entries.")
+        except Exception as e:
             if request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json':
                 return jsonify({"error": e.__str__()})
             else:
                 flash(e)
 
     if request.accept_mimetypes.best_match(['application/json', 'text/html']) == 'application/json':
-        # wait to get a workflow ID
         while not global_config.runner_status:
             time.sleep(1)
         return jsonify({"status": "task started", "task_id": global_config.runner_status.get("id")})
     else:
-        # todo if want to be able to optimize more then add something called objectives_list instead, and add that to the tab_bayesian.html, and add in
-        #  more than just the return_list in there; e.g. be able to use math or normal or human input variables as objectives
         return render_template('experiment_run.html', script=script.script_dict, filename=filename,
                                dot_py=exec_string, line_collection=line_collection,
                                return_list=return_list, config_list=config_list, config_file_list=config_file_list,
@@ -253,25 +202,9 @@ def optimizer_schema():
             return jsonify(optimizers_schema)
     return None
 
-
 @execute.route("/executions/campaign", methods=["POST"])
 @login_required
 def run_bo():
-    """
-    .. :quickref: Workflow Execution; run Bayesian Optimization
-
-    Run Bayesian Optimization with the given parameters and objectives.
-
-    .. http:post:: /executions/campaign
-
-    :form repeat: number of iterations to run
-    :form optimizer_type: type of optimizer to use
-    :form existing_data: existing data to use for optimization
-    :form parameters: parameters for optimization
-    :form objectives: objectives for optimization
-
-    TODO: merge to experiment_run or not, add more details about the form fields and their expected values.
-    """
     script = utils.get_script_file()
     run_name = script.name if script.name else "untitled"
 
@@ -293,11 +226,8 @@ def run_bo():
         existing_data = payload.pop("existing_data", None)
         upload_new_data = payload.pop("data_mode_toggle", None)
 
-        # warning - existing data may be set if selected a file in choose existing data, BUT if you choose to upload
-        #   data then the uplodaded data payload will also exist. choose the one to use based on the data mode toggle
-        if upload_new_data == 'on': # use custom uploaded data
+        if upload_new_data == 'on':
             uploaded_file = request.files.get("uploaded_data")
-            # Handle file upload if present
             if uploaded_file and uploaded_file.filename:
                 filename = secure_filename(uploaded_file.filename)
                 filepath = os.path.join(current_app.config['DATA_FOLDER'], filename)
@@ -306,34 +236,37 @@ def run_bo():
             else:
                 existing_data = ''
         else:
-            # use previous existing data
             existing_data = existing_data
 
         batch_mode = payload.pop("batch_mode", None)
         batch_size = payload.pop("batch_size", 1)
 
-        # Get constraint expressions (new single-line input)
         constraint_exprs = request.form.getlist("constraint_expr")
         constraints = [expr.strip() for expr in constraint_exprs if expr.strip()]
 
-        # Remove constraint_expr entries from payload before parsing parameters
         for key in list(payload.keys()):
             if key.startswith("constraint_expr"):
                 payload.pop(key, None)
 
         parameters, objectives, steps, additional_params = parse_optimization_form(payload)
-        # print(additional_params)
-    # if True:
+
     try:
-        datapath = current_app.config["DATA_FOLDER"]
+        base_datapath = current_app.config["DATA_FOLDER"]
         run_name = script.validate_function_name(run_name)
+        
+        timestamp = time.strftime('%Y-%m-%d_%H-%M-%S')
+        datapath = os.path.join(base_datapath, f"{run_name}_{timestamp}")
+        os.makedirs(datapath, exist_ok=True)
+
+        log_path = os.path.join(datapath, "logs")
+        os.makedirs(log_path, exist_ok=True)
+
         Optimizer = global_config.optimizers.get(optimizer_type, None)
         if not Optimizer:
             raise ValueError(f"Optimizer {optimizer_type} is not supported or not found.")
 
         socketio_instance = g.socketio
         def on_start_callback():
-            # This runs inside the thread with app context pushed
             snapshot = global_config.deck_snapshot
             line_collection = script.render_nested_script_lines(script.script_dict, snapshot=snapshot)
             progress_panel_html = render_template('components/progress_panel.html', line_collection=line_collection)
@@ -344,7 +277,7 @@ def run_bo():
 
         result = runner.run_script(script=script, run_name=run_name, optimizer=None,
                           logger=g.logger, socketio=g.socketio, repeat_count=repeat,
-                          output_path=datapath, compiled=False, history=existing_data,
+                          output_path=log_path, compiled=False, history=existing_data,
                           current_app=current_app._get_current_object(), batch_size=int(batch_size),
                           objectives=objectives, parameters=parameters, constraints=constraints, steps=steps,
                           optimizer_cls=Optimizer, additional_params=additional_params,
@@ -365,32 +298,21 @@ def run_bo():
 @execute.route("/executions/latest_plot")
 @login_required
 def get_optimizer_plot():
-
     optimizer = current_app.config.get("LAST_OPTIMIZER")
     if optimizer is not None:
-        # the placeholder is for showing different plots
         latest_file = optimizer.get_plots('placeholder')
-        # print(latest_file)
         if files:
             return send_file(latest_file, mimetype="image/png")
-    # print("No plots found")
     return jsonify({"error": "No plots found"}), 404
-
 
 @execute.route("/executions/queue", methods=["GET"])
 @login_required
 def get_queue():
-    """
-    Get the current execution queue
-    """
     return jsonify(runner.get_queue_status())
 
 @execute.route("/executions/queue/delete", methods=["POST"])
 @login_required
 def delete_queue_task():
-    """
-    Delete a task from the queue
-    """
     try:
         data = request.get_json()
         task_id = data.get("id")
@@ -403,9 +325,6 @@ def delete_queue_task():
 @execute.route("/executions/queue/reorder", methods=["POST"])
 @login_required
 def reorder_queue_task():
-    """
-    Reorder a task in the queue
-    """
     try:
         data = request.get_json()
         task_id = data.get("id")
@@ -419,29 +338,13 @@ def reorder_queue_task():
 @execute.route("/executions/queue/task/<int:task_id>", methods=["GET"])
 @login_required
 def get_queue_task_details(task_id):
-    """
-    Get full details for a queued task
-    """
     details = runner.get_task_details(task_id)
     if details:
         return jsonify(details)
     return jsonify({"error": "Task not found"}), 404
 
-
-
-
 @execute.route("/executions/status", methods=["GET"])
 def runner_status():
-    """
-    .. :quickref: Workflow Execution Control; backend runner status
-
-    get is system is busy and current task
-
-    .. http:get:: /executions/status
-
-
-    """
-    # runner = global_config.runner
     runner_busy = global_config.runner_lock.locked()
     status = {"busy": runner_busy}
     task_status = global_config.runner_status
@@ -451,7 +354,6 @@ def runner_status():
         task_type = task_status["type"]
         task_id = task_status["id"]
         if task_type == "task":
-            # todo
             step = SingleStep.query.get(task_id)
             current_step = step.as_dict()
         if task_type == "workflow":
@@ -467,73 +369,29 @@ def runner_status():
     status["current_task"] = current_step
     return jsonify(status), 200
 
-
 @execute.route("/executions/abort/next-iteration", methods=["POST"])
 def api_abort_pending():
-    """
-    .. :quickref: Workflow Execution control; abort pending workflow
-
-    finish the current iteration and stop pending workflow iterations
-
-    .. http:get:: /executions/abort/next-iteration
-
-    """
     abort_pending()
     return jsonify({"status": "ok"}), 200
 
-
 @execute.route("/executions/abort/next-task", methods=["POST"])
 def api_abort_current():
-    """
-    .. :quickref: Workflow Execution Control; abort all pending tasks starting from the next task
-
-    finish the current task and stop all pending tasks or iterations
-
-    .. http:get:: /executions/abort/next-task
-
-    """
     abort_current()
     return jsonify({"status": "ok"}), 200
 
-
 @execute.route("/executions/pause-resume", methods=["POST"])
 def api_pause():
-    """
-    .. :quickref: Workflow Execution Control; pause and resume
-
-    pause workflow iterations or resume workflow iterations
-
-    .. http:get:: /executions/pause-resume
-
-    """
     msg = pause()
     return jsonify({"status": "ok", "pause_status": msg}), 200
 
-
 @execute.route("/executions/retry", methods=["POST"])
 def api_retry():
-    """
-    .. :quickref: Workflow Execution Control; retry the failed workflow execution step.
-
-    retry the failed workflow execution step.
-
-    .. http:get:: /executions/retry
-
-    """
     retry()
     return jsonify({"status": "ok, retrying failed step"}), 200
-
 
 @execute.route('/files/preview/<path:filename>')
 @login_required
 def data_preview(filename):
-    """
-    .. :quickref: Workflow Execution Files; preview a workflow history file (.CSV)
-
-    Preview the contents of a workflow history file in CSV format.
-
-    .. http:get:: /files/preview/<str:filename>
-    """
     import csv
     import os
     from flask import abort
@@ -545,7 +403,4 @@ def data_preview(filename):
     with open(file_path, newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         rows = list(reader)
-    # Limit preview to first 10 rows
     return jsonify({"columns": reader.fieldnames, "rows": rows})
-
-

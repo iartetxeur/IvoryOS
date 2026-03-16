@@ -9,38 +9,21 @@ import time
 import csv
 
 class OceanOpticsSpectrometer:
-    """
-    Controlador para Espectrofotómetro Ocean Optics.
-    """
-
     def __init__(self, integration_time_micros: int = 100000, num_scans: int = 5):
-        """
-        Inicializa la conexión real con el hardware por USB.
-        :param integration_time_micros: Tiempo de integración.
-        :param num_scans: Número de mediciones a promediar.
-        """
         self.integration_time = integration_time_micros
         self.num_scans = num_scans
-        
         try:
-            # 1. Busca el hardware conectado
             devices = sb.list_devices()
             if not devices:
                 raise Exception("¡No se ha encontrado ningún espectrofotómetro conectado!")
-
-            # 2. Conecta y aplica configuración
             self.spectrometer = sb.Spectrometer(devices[0])
             self.spectrometer.integration_time_micros(self.integration_time)
-            
-            # Guardamos las longitudes de onda (como lista para evitar errores de IvoryOS)
             self.wavelengths = self.spectrometer.wavelengths().tolist()
-            
             self.baseline = None
             self.dark_spectrum = None
-
             logging.info("SPECTROMETER - Conectado con éxito al hardware real")
         except Exception as e:
-            logging.error(f"Fallo al conectar con el equipo: {str(e)}")
+            logging.error(f"Fallo al conectar: {str(e)}")
             raise
 
     def average_scans(self) -> list:
@@ -68,48 +51,42 @@ class OceanOpticsSpectrometer:
         self.dark_spectrum = self.average_scans()
         logging.info("Espectro oscuro guardado.")
         return self.dark_spectrum
-    def take_current_spectrum(self) -> list:
-        """Mide, dibuja y crea el CSV científico en la carpeta del experimento."""
-        intensities = self.spectrometer.intensities().tolist()
-        
-        # 1. TRUCO INFALIBLE: Buscar la carpeta más reciente que ha creado IvoryOS en 'results'
-        base_dir = os.path.join(os.getcwd(), 'ivoryos_data', 'results')
-        os.makedirs(base_dir, exist_ok=True) # Por si acaso
-        
-        carpetas = [os.path.join(base_dir, d) for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
-        
-        if carpetas:
-            target_dir = max(carpetas, key=os.path.getmtime) # Coge la última carpeta creada
-        else:
-            target_dir = base_dir
+    def take_current_spectrum(self, integration_time_micros: int = 100000, num_scans: int = 5) -> list:
+        """
+        Mide el espectro permitiendo configurar el tiempo y los promedios desde la web.
+        """
+        # APLICAR LA CONFIGURACIÓN RECIBIDA DESDE LA WEB
+        try:
+            self.spectrometer.integration_time_micros(integration_time_micros)
+            self.num_scans = num_scans # Actualizamos para el promedio si fuera necesario
+            logging.info(f"Configurado: {integration_time_micros} micros, {num_scans} scans.")
+        except Exception as e:
+            logging.error(f"Error al aplicar config: {e}")
 
+        # Toma de datos (usando el promedio si lo deseas, o toma directa)
+        # Si quieres que use el promedio de num_scans:
+        scans = [self.spectrometer.intensities() for _ in range(num_scans)]
+        intensities = np.mean(scans, axis=0).tolist()
+        
+        # --- Lógica de guardado (la que ya teníamos) ---
+        base_dir = os.path.join(os.getcwd(), 'ivoryos_data', 'results')
+        carpetas = [os.path.join(base_dir, d) for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
+        target_dir = max(carpetas, key=os.path.getmtime) if carpetas else base_dir
         file_time = time.strftime('%H-%M-%S')
         
-        # 2. GUARDAR LA FOTO (.png) EN LA CARPETA
-        try:
-            plt.figure(figsize=(10, 5))
-            plt.plot(self.wavelengths, intensities, color='blue')
-            plt.title(f'Espectro - {file_time}')
-            plt.xlabel('Longitud de onda (nm)')
-            plt.ylabel('Intensidad')
-            plt.grid(True)
-            png_path = os.path.join(target_dir, f"grafica_{file_time}.png")
-            plt.savefig(png_path)
-            plt.close('all')
-        except Exception as e:
-            print(f"Error al guardar gráfica: {e}")
+        # Guardar Gráfica
+        plt.figure(figsize=(10, 5))
+        plt.plot(self.wavelengths, intensities, color='blue')
+        plt.savefig(os.path.join(target_dir, f"grafica_{file_time}.png"))
+        plt.close('all')
 
-        # 3. GUARDAR LOS DATOS REALES EN UN CSV CIENTÍFICO EN LA CARPETA
-        try:
-            csv_path = os.path.join(target_dir, f"datos_raw_{file_time}.csv")
-            with open(csv_path, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(['Wavelength (nm)', 'Intensity'])
-                for w, i in zip(self.wavelengths, intensities):
-                    writer.writerow([w, i])
-            print(f"\n---> ¡ÉXITO! FOTO Y DATOS RAW GUARDADOS EN: {target_dir} <---")
-        except Exception as e:
-            print(f"Error al guardar CSV raw: {e}")
+        # Guardar CSV con prefijo DATA_ para el filtro
+        csv_path = os.path.join(target_dir, f"DATA_{file_time}.csv")
+        with open(csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Wavelength (nm)', 'Intensity'])
+            for w, i in zip(self.wavelengths, intensities):
+                writer.writerow([w, i])
 
         return intensities
     def close_connection(self):
