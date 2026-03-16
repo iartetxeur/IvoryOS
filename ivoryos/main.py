@@ -7,6 +7,7 @@ ocean_optics_spectrometer = OceanOpticsSpectrometer(
     num_scans=5
 )
 
+
 if __name__ == "__main__":
     # Arranca la interfaz web con el hardware ya conectado
     ivoryos.run(__name__)
