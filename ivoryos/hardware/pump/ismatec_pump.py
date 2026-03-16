@@ -1,9 +1,9 @@
 import logging
 import time
-from pumps.ismatec import Ismatec
+from ismatec import RegloICC as Ismatec
 
 class IsmatecPump:
-    def __init__(self, port: str = "COM3"):
+    def __init__(self, port: str = "COM7"):
         """
         Inicializa la conexión con la bomba Ismatec.
         :param port: Puerto COM donde está conectada la bomba.

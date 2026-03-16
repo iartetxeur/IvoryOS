@@ -1,5 +1,7 @@
 import ivoryos
-from hardware.ocean_optics_spectrometer import OceanOpticsSpectrometer 
+
+from hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
+from hardware.pump.ismatec_pump import IsmatecPump
 
 # Al crear el objeto aquí, Python buscará físicamente el hardware por USB.
 ocean_optics_spectrometer = OceanOpticsSpectrometer(
@@ -7,6 +9,8 @@ ocean_optics_spectrometer = OceanOpticsSpectrometer(
     num_scans=5
 )
 
+# Inicializamos la bomba con su puerto correspondiente (modifica "COM3" si es necesario)
+bomba_ismatec = IsmatecPump(port="COM3")
 
 if __name__ == "__main__":
     # Arranca la interfaz web con el hardware ya conectado
