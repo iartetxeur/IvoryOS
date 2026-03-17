@@ -10,7 +10,7 @@ ocean_optics_spectrometer = OceanOpticsSpectrometer(
     num_scans=5
 )
 
-bomba_ismatec = IsmatecPump(port="COM7")
+pump_ismatec = IsmatecPump(port="COM7")
 
 if __name__ == "__main__":
     try:
@@ -19,6 +19,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         # Esto soluciona el problema de que tarde mucho en cerrarse
         print("\nCerrando conexiones...")
-        if 'bomba_ismatec' in globals() and bomba_ismatec.connection:
-            bomba_ismatec.connection.close()
+        if 'pump_ismatec' in globals() and pump_ismatec.connection:
+            pump_ismatec.connection.close()
         print("Servidor detenido.")
