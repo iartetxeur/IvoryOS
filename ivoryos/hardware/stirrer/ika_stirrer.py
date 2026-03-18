@@ -147,3 +147,25 @@ class IkaStirrer:
                 
             # Esperar 2 segundos para no saturar el cable USB
             time.sleep(2.0)
+
+    def wait_for_stirring(self, target_rpm: int, tolerance: int = 10):
+        """
+        Pausa el experimento en IvoryOS hasta que el motor alcance las RPM deseadas.
+        - target_rpm: La velocidad que quieres alcanzar.
+        - tolerance: El margen de error aceptado (ej: ±10 RPM).
+        """
+        print(f"\n[INFO] Esperando a alcanzar {target_rpm} RPM (Tolerancia: ±{tolerance} RPM)...")
+        
+        while True:
+            # Usamos la función que lee la velocidad REAL del motor (IN_PV_4)
+            current_rpm = self.get_stirring_speed()
+            
+            sys.stdout.write(f"\r---> Velocidad actual: {current_rpm} RPM / Objetivo: {target_rpm} RPM")
+            sys.stdout.flush()
+            
+            # Comprobamos si la velocidad actual está dentro del rango
+            if current_rpm != -999.0 and abs(current_rpm - target_rpm) <= tolerance:
+                print(f"\n[OK] Velocidad de {current_rpm} RPM alcanzada. ¡Continuando!")
+                break
+            
+            time.sleep(1.0)
