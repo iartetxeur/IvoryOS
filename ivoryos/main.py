@@ -3,14 +3,18 @@ import logging
 
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
 from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
+from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer 
 
-# Inicializamos el espectrómetro
+#OCEAN OPTICS SPECTROMETER
 ocean_optics_spectrometer = OceanOpticsSpectrometer(
     integration_time_micros=100000, 
     num_scans=5
 )
+#ISMATEC PUMP
+pump_ismatec = IsmatecPump(port="COM8")
 
-pump_ismatec = IsmatecPump(port="COM7")
+#IKA STIRRER
+ika_stirrer = IkaStirrer(port="COM9")
 
 if __name__ == "__main__":
     try:
