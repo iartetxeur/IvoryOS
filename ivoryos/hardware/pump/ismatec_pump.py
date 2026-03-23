@@ -29,12 +29,13 @@ def pack_discrete2(number: float) -> str:
     return f"{int(round(number * 100)):04d}"
 
 class IsmatecPump:
-    def __init__(self, port: str = "COM8", baudrate: int = 9600):
+    def __init__(self, port: str = "COM8", address: int = 1, baudrate: int = 9600):
         self.port = port
+        self.address = address  # Guardamos la dirección (1, 2, etc.) de la bomba
         self.baudrate = baudrate
         self.connection = None
         
-        # --- MEJORA: Controladores de hilos y seguridad ---
+        # Controladores de hilos y seguridad ---
         # Evita que los comandos serie se pisen si el usuario pulsa botones muy rápido
         self._lock = threading.Lock() 
         # Diccionario que guarda un "interruptor" para poder apagar la barra de cada canal
@@ -47,23 +48,25 @@ class IsmatecPump:
                 bytesize=serial.EIGHTBITS,
                 stopbits=serial.STOPBITS_ONE,
                 parity=serial.PARITY_NONE,
-                # Timeout = 0.1 es CRÍTICO para que al hacer Ctrl+C el servidor cierre rápido y no tarde 5 minutos
+                # Timeout = 0.1 es CRÍTICO para que al hacer Ctrl+C el servidor cierre rápido
                 timeout=0.1
             )
-            logging.info(f"PUMP Ismatec - Conectada en {port}")
+            logging.info(f"PUMP Ismatec (Addr {address}) - Conectada en {port}")
             
-            # SECRETO NUMAT: Activar control de canales independientes al arrancar ('1~1')
-            self.send_command('1~1') 
+            # SECRETO NUMAT: Activar control de canales independientes al arrancar.
+            # Ahora usamos la dirección dinámica de la instancia.
+            self.send_command('~1') 
             time.sleep(0.1)
 
         except Exception as e:
             logging.error(f"PUMP Ismatec - Error de conexión: {e}")
 
     def send_command(self, command: str) -> str:
-        """Envía el comando con el terminador estricto que requiere la bomba (Carriage Return '\\r')."""
+        """Envía comandos incluyendo la dirección de la bomba."""
         if self.connection and self.connection.is_open:
-            with self._lock: # Bloqueamos el puerto mientras enviamos para que no se mezclen órdenes de varios canales
-                cmd = command.strip() + "\r"
+            with self._lock:
+                # El protocolo requiere: [Dirección][Comando]\r
+                cmd = f"{self.address}{command.strip()}\r" 
                 self.connection.write(cmd.encode())
                 return self.connection.readline().decode().strip()
         return ""
