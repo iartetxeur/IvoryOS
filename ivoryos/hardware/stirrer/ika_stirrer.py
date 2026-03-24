@@ -6,7 +6,7 @@ import sys
 import re
 
 class IkaStirrer:
-    def __init__(self, port: str = "COM9"):
+    def __init__(self, port: str = "COM5"):
         self.port = port
         self.connection = None
         

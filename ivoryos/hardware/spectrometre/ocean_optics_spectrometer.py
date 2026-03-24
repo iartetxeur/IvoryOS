@@ -90,7 +90,6 @@ class OceanOpticsSpectrometer:
         return None
 
     def take_current_spectrum(self, integration_time_micros: int = 100000, num_scans: int = 5):
-        """Mide la muestra. Solo funciona si el USB está conectado."""
         if self.spectrometer:
             self.spectrometer.integration_time_micros(integration_time_micros)
             scans = [self.spectrometer.intensities() for _ in range(num_scans)]
