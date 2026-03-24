@@ -15,25 +15,23 @@ import csv
 
 class OceanOpticsSpectrometer:
     def __init__(self, integration_time_micros: int = 100000, num_scans: int = 5):
-        """
-        Al iniciar IvoryOS, esta función intenta conectar con el USB.
-        Si no lo encuentra, 'self.spectrometer' se queda vacío (None).
-        """
         self.integration_time = integration_time_micros
         self.num_scans = num_scans
         self.spectrometer = None  
         self.wavelengths = []
         
         try:
-            # Intento de conexión con el hardware real
             devices = sb.list_devices()
             if devices:
                 self.spectrometer = sb.Spectrometer(devices[0])
                 self.spectrometer.integration_time_micros(self.integration_time)
                 self.wavelengths = self.spectrometer.wavelengths().tolist()
+                print("✅ Espectrómetro Ocean Optics detectado y listo.")
+            else:
+                raise Exception("No devices found")
+                
         except Exception:
-            # Si falla (no hay USB), no lanzamos error para que IvoryOS siga funcionando para la bomba
-            pass
+            print("⚠️ AVISO: Espectrómetro Ocean Optics NO detectado. Trabajando en modo offline.")
 
     def _get_target_dir(self):
         """Busca automáticamente la carpeta del experimento que IvoryOS acaba de crear."""

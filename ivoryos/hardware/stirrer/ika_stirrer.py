@@ -7,27 +7,35 @@ import re
 
 class IkaStirrer:
     def __init__(self, port: str = "COM5"):
-        self.port = port
+        # 1. Definir la variable ANTES de que nada pueda fallar
+        self.port = port 
         self.connection = None
-        
         self._lock = threading.Lock()
 
         try:
-            # Configuración RS232 estrictamente requerida por los manuales de IKA (NAMUR):
-            # 9600 baudios, 7 bits de datos, paridad PAR (Even), 1 bit de parada.
+            # 2. Intentar la conexión
             self.connection = serial.Serial(
                 port=self.port,
                 baudrate=9600,
                 bytesize=serial.SEVENBITS,
                 stopbits=serial.STOPBITS_ONE,
                 parity=serial.PARITY_EVEN,
-                timeout=0.1
+                timeout=0.5
             )
-            logging.info(f"STIRRER IKA - Conectado en {port}")
-            print(f"✅ Placa IKA RCT 5 digital conectada correctamente en {port}")
             
+            # 3. Verificación real con comando NAMUR
+            self.connection.write(b"IN_NAME\r\n")
+            respuesta = self.connection.readline().decode().strip()
+            
+            if "IKA" in respuesta:
+                print(f"✅ Placa IKA detectada ({respuesta}) en {self.port}")
+            else:
+                raise serial.SerialException("Equipo no responde.")
+                
         except Exception as e:
-            logging.error(f"STIRRER IKA - Error de conexión: {e}")
+            # Ahora self.port ya existe, por lo que no habrá crash
+            print(f"❌ AVISO: No hay comunicación con la Placa IKA en {self.port}. (Modo Offline)")
+            self.connection = None
 
     def send_command(self, command: str) -> str:
         """Envía el comando con el terminador estándar de IKA (Carriage Return + Line Feed)."""
