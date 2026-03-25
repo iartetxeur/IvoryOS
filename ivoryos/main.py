@@ -1,31 +1,56 @@
-import ivoryos
-import logging
 import sys
+import logging
+import ivoryos
 
-# Importamos los drivers de nuestros equipos
+# --- IMPORTACIONES DE HARDWARE ---
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
 from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
 from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer
 
 # ==========================================
-# --- CONFIGURACIÓN DE HARDWARE ---
+# --- SISTEMA DE SELECCIÓN DE DECK ---
 # ==========================================
 
-# 1. OCEAN OPTICS SPECTROMETER
-ocean_optics_spectrometer = OceanOpticsSpectrometer(
-    integration_time_micros=100000, 
-    num_scans=5
-)
+# Por defecto, si no le decimos nada al arrancar, cargará el deck "sintesis"
+deck_seleccionado = "sintesis"
 
-# 2. ISMATEC PUMPS
-# Al estar en USBs independientes (HUB), cada una es la dueña de su cable,
-# por lo que no hace falta usar 'address'.
-pump_1 = IsmatecPump(port="COM8")
-pump_2 = IsmatecPump(port="COM9")
+# Si le pasamos un argumento por consola (ej: python -m ivoryos.main analisis)
+if len(sys.argv) > 1:
+    # Usamos [-1] para coger el último argumento de forma segura, 
+    # por si Python añade argumentos extra como el '-m'
+    argumento = sys.argv[-1].lower()
+    if argumento in ["sintesis", "analisis", "todo", "simulacion"]:
+        deck_seleccionado = argumento
 
-# 3. IKA STIRRER
-# Conectado en el puerto COM5 (con lectura de temperatura y RPM)
-ika_stirrer = IkaStirrer(port="COM5")
+print(f"\n{'='*50}")
+print(f"🚀 INICIALIZANDO IVORYOS - DECK: {deck_seleccionado.upper()}")
+print(f"{'='*50}\n")
+
+# ==========================================
+# --- CONFIGURACIÓN DE LOS DECKS ---
+# ==========================================
+
+if deck_seleccionado == "sintesis":
+    print("[INFO] Cargando hardware de Síntesis...")
+    pump_1 = IsmatecPump(port="COM8")
+    pump_2 = IsmatecPump(port="COM9")
+    ika_stirrer = IkaStirrer(port="COM5")
+
+elif deck_seleccionado == "analisis":
+    print("[INFO] Cargando hardware de Análisis Óptico...")
+    ocean_optics_spectrometer = OceanOpticsSpectrometer(integration_time_micros=100000, num_scans=5)
+    # chopper_optico = ThorlabsChopper(port="COM10") # Descomentar cuando lo uses
+
+elif deck_seleccionado == "todo":
+    print("[INFO] Cargando TODO el hardware disponible...")
+    pump_1 = IsmatecPump(port="COM8")
+    pump_2 = IsmatecPump(port="COM9")
+    ika_stirrer = IkaStirrer(port="COM5")
+    ocean_optics_spectrometer = OceanOpticsSpectrometer()
+
+elif deck_seleccionado == "simulacion":
+    print("[INFO] Cargando en Modo Simulación (Deck vacío para programar en casa)...")
+    pass # No iniciamos ningún hardware real
 
 # ==========================================
 # --- ARRANQUE DEL SERVIDOR ---
@@ -33,31 +58,24 @@ ika_stirrer = IkaStirrer(port="COM5")
 
 if __name__ == "__main__":
     try:
-        # Arranca la interfaz web de IvoryOS. 
-        # debug=False evita que el servidor arranque dos veces y oculte los mensajes de la consola.
+        # Arranca la web. ¡El modo Debug apagado para no silenciar los errores!
         ivoryos.run(__name__, debug=False)
         
     except KeyboardInterrupt:
-        # Esto captura cuando pulsas Ctrl+C en la consola
-        print("\n[INFO] Deteniendo servidores por el usuario (Ctrl+C)...")
+        print("\n[INFO] Deteniendo el servidor por el usuario (Ctrl+C)...")
         
     finally:
-        # CIERRE SEGURO DE PUERTOS: Evita errores de "NoneType" o bloqueos en los COM
-        print("[INFO] Cerrando conexiones de hardware...")
+        print("\n[INFO] Cerrando conexiones de hardware de forma segura...")
         
-        # Cerramos Bomba 1 y 2 comprobando si existen
-        for pump_name in ['pump_1', 'pump_2']:
-            if pump_name in locals():
-                p = locals()[pump_name]
-                if hasattr(p, 'connection') and p.connection:
-                    p.connection.close()
-                    print(f" - {pump_name} cerrada de forma segura.")
-        
-        # Cerramos Agitador
-        if 'ika_stirrer' in locals() and hasattr(ika_stirrer, 'connection') and ika_stirrer.connection:
-            ika_stirrer.connection.close()
-            print(" - Agitador IKA cerrado de forma segura.")
-            
-            
-        print("✅ Todos los puertos COM han sido liberados. Servidor detenido.")
+        # Bucle inteligente que busca cualquier hardware que se haya abierto y cierra su puerto
+        for obj_name, obj in list(locals().items()):
+            if hasattr(obj, 'connection') and obj.connection:
+                if hasattr(obj.connection, 'is_open') and obj.connection.is_open:
+                    try:
+                        obj.connection.close()
+                        print(f" ✅ Puerto COM liberado para: {obj_name}")
+                    except Exception as e:
+                        print(f" ⚠️ Error cerrando {obj_name}: {e}")
+                        
+        print("👋 Sistema apagado correctamente.")
         sys.exit(0)
