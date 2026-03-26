@@ -118,6 +118,13 @@
                     {% elif field.type == "BooleanField" %}
                     {{ field(class="form-check-input") }}
                     {% elif field.type == "FlexibleEnumField" %}
+                    <select id="{{ field.id }}" name="{{ field.name }}" class="form-select">
+                        {% for key in field.choices %}
+                            <option value="{{ key }}" {% if field._value() == key %}selected{% endif %}>
+                                {{ key }}
+                            </option>
+                        {% endfor %}
+                    </select>
                     <input type="text" id="{{ field.id }}" name="{{ field.name }}" value="{{ field._value() }}"
                       list="{{ field.id }}_options"
                       placeholder="{{ field.render_kw.placeholder if field.render_kw and field.render_kw.placeholder }}"

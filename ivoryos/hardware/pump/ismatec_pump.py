@@ -3,12 +3,40 @@ import logging
 import time
 import sys
 import threading
+from enum import Enum
 
 try:
     from .channel import Channel
 except ImportError:
     pass
-
+# --- CREAR LA LISTA CERRADA PARA LA INTERFAZ DE IVORYOS ---
+class TubingDiameter(Enum):
+    Tube_0_13_mm = 0.13
+    Tube_0_19_mm = 0.19
+    Tube_0_25_mm = 0.25
+    Tube_0_38_mm = 0.38
+    Tube_0_44_mm = 0.44
+    Tube_0_51_mm = 0.51
+    Tube_0_57_mm = 0.57
+    Tube_0_64_mm = 0.64
+    Tube_0_76_mm = 0.76
+    Tube_0_89_mm = 0.89
+    Tube_0_95_mm = 0.95
+    Tube_1_02_mm = 1.02
+    Tube_1_09_mm = 1.09
+    Tube_1_14_mm = 1.14
+    Tube_1_22_mm = 1.22
+    Tube_1_30_mm = 1.30
+    Tube_1_42_mm = 1.42
+    Tube_1_52_mm = 1.52
+    Tube_1_65_mm = 1.65
+    Tube_1_75_mm = 1.75
+    Tube_1_85_mm = 1.85
+    Tube_2_06_mm = 2.06
+    Tube_2_29_mm = 2.29
+    Tube_2_54_mm = 2.54
+    Tube_2_79_mm = 2.79
+    Tube_3_17_mm = 3.17
 # --- Funciones matemáticas (Extraídas del protocolo NuMat) ---
 
 def pack_volume2(number: float) -> str:
@@ -94,25 +122,23 @@ class IsmatecPump:
                 logging.error(f"Error al iniciar bombeo continuo: {e}")
 
     # --- FUNCIÓN 2: CONFIGURACIÓN DE TUBO ---
-    def set_tubing_diameter(self, channel_index: int = 1, tubing_diam_mm: float = 1.14):
+    def set_tubing_diameter(self, channel_index: int = 1, tubing_diam: TubingDiameter = TubingDiameter.Tube_1_42_mm):
         """
         Configura el diámetro interno del tubo. 
-        Ismatec solo acepta valores preprogramados de fábrica.
+        Despliega la lista para elegir un valor preprogramado de fábrica.
         """
-        # Lista de diámetros internos estándar (ID en mm) para tubos Ismatec (2-stop y 3-stop)
-        VALID_TUBING_DIAMETERS = [
-            0.13, 0.19, 0.25, 0.38, 0.44, 0.51, 0.57, 0.64, 0.76, 0.89, 0.95,
-            1.02, 1.14, 1.22, 1.30, 1.37, 1.42, 1.52, 1.60, 1.65, 1.75, 1.85, 
-            2.06, 2.29, 2.54, 2.79, 3.17
-        ]
+        # 1. Extraer el valor numérico (float) del Enum que eligió el usuario en la interfaz
+        # (Si por algún motivo llega como texto o float desde otro lado, lo manejamos)
+        if isinstance(tubing_diam, TubingDiameter):
+            tubing_diam_mm = tubing_diam.value
+        else:
+            # En caso de que se haya inyectado como variable dinámica (#variable)
+            tubing_diam_mm = float(tubing_diam)
         
-        # Buscar el diámetro válido más cercano al que ha pedido el usuario
-        closest_diam = min(VALID_TUBING_DIAMETERS, key=lambda x: abs(x - tubing_diam_mm))
-        
-        if closest_diam != tubing_diam_mm:
-            print(f"[AVISO] El diámetro {tubing_diam_mm} mm no es compatible con Ismatec.")
-            print(f"        -> Autocorrigiendo al tubo estándar más cercano: {closest_diam} mm")
-            tubing_diam_mm = closest_diam
+        # 2.Guardamos en la memoria interna (si implementaste el muro de seguridad anterior)
+        if not hasattr(self, 'channel_tubing'):
+            self.channel_tubing = {}
+        self.channel_tubing[channel_index] = tubing_diam_mm
 
         if self.connection:
             try:
@@ -124,6 +150,50 @@ class IsmatecPump:
                 print(f"---> [CONFIG] Canal {channel_index} | Tubo fijado en: {tubing_diam_mm} mm")
             except Exception as e:
                 logging.error(f"Error al configurar diámetro: {e}")
+
+    def get_tubing_diameter(self, channel_index: int = 1) -> float:
+        """
+        Devuelve el diámetro del tubo configurado.
+        Primero lee de la memoria segura de IvoryOS, si no está, interroga a la bomba.
+        """
+        import re
+        
+        # 1. Leer de nuestra memoria interna
+        if hasattr(self, 'channel_tubing') and channel_index in self.channel_tubing:
+            diam_real = self.channel_tubing[channel_index]
+            print(f"---> [INFO] Memoria IvoryOS: Canal {channel_index} tiene tubo de {diam_real} mm")
+            return float(diam_real)
+            
+        # 2. Si la memoria está vacía, interrogar al hardware físico
+        if self.connection:
+            try:
+                # Interrogar a la bomba
+                respuesta = self.send_command(f"{channel_index}+")
+                
+                # Buscar secuencias de números ignorando símbolos raros (ej: "+0114\r")
+                matches = re.findall(r'\d+', respuesta)
+                
+                if matches:
+                    # El primer número encontrado suele ser el valor (0114 -> 1.14)
+                    diam_real = float(matches[0]) / 100.0
+                    
+                    # Guardarlo en memoria para no tener que volver a preguntar
+                    if not hasattr(self, 'channel_tubing'):
+                        self.channel_tubing = {}
+                    self.channel_tubing[channel_index] = diam_real
+                    
+                    print(f"---> [INFO] Bomba física reporta: Canal {channel_index} tiene tubo de {diam_real} mm")
+                    return float(diam_real)
+                else:
+                    raise ValueError(f"La bomba devolvió un valor irreconocible: '{respuesta}'")
+                    
+            except Exception as e:
+                logging.error(f"Error al leer diámetro físicamente: {e}")
+                
+        # 3. Si todo falla
+        error_msg = f"❌ ERROR: No se conoce el diámetro del tubo en el Canal {channel_index}. Usa la acción 'set_tubing_diameter' primero."
+        print(error_msg)
+        raise ValueError(error_msg)
 
     # --- FUNCIÓN 3: DOSIFICAR VOLUMEN CON BARRA DE PROGRESO ---
     def dispense_volume(self, channel_index: int = 1, volume_ml: float = 1.0, flow_rate_ml_min: float = 1.0, direction: str = "CW"):

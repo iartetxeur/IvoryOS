@@ -5,7 +5,6 @@ import time
 import sys
 import re
 
-#TODO: Añadir tiempo de espera entre comandos, tiene que acabar el dispense_volume antes de pasar a la siguiente orden.
 class IkaStirrer:
     def __init__(self, port: str = "COM5"):
         # 1. Definir la variable ANTES de que nada pueda fallar
