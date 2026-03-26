@@ -97,8 +97,23 @@ class IsmatecPump:
     def set_tubing_diameter(self, channel_index: int = 1, tubing_diam_mm: float = 1.14):
         """
         Configura el diámetro interno del tubo. 
-        CRÍTICO para que los cálculos internos de mL/min y volúmenes de la bomba sean exactos.
+        Ismatec solo acepta valores preprogramados de fábrica.
         """
+        # Lista de diámetros internos estándar (ID en mm) para tubos Ismatec (2-stop y 3-stop)
+        VALID_TUBING_DIAMETERS = [
+            0.13, 0.19, 0.25, 0.38, 0.44, 0.51, 0.57, 0.64, 0.76, 0.89, 0.95,
+            1.02, 1.14, 1.22, 1.30, 1.37, 1.42, 1.52, 1.60, 1.65, 1.75, 1.85, 
+            2.06, 2.29, 2.54, 2.79, 3.17
+        ]
+        
+        # Buscar el diámetro válido más cercano al que ha pedido el usuario
+        closest_diam = min(VALID_TUBING_DIAMETERS, key=lambda x: abs(x - tubing_diam_mm))
+        
+        if closest_diam != tubing_diam_mm:
+            print(f"[AVISO] El diámetro {tubing_diam_mm} mm no es compatible con Ismatec.")
+            print(f"        -> Autocorrigiendo al tubo estándar más cercano: {closest_diam} mm")
+            tubing_diam_mm = closest_diam
+
         if self.connection:
             try:
                 # El comando es '+' (plus) seguido del diámetro empaquetado a 4 dígitos
@@ -106,7 +121,7 @@ class IsmatecPump:
                 self.send_command(f"{channel_index}+{packed_diam}")
                 
                 logging.info(f"Canal {channel_index}: Diámetro configurado a {tubing_diam_mm} mm")
-                print(f"---> [CONFIG] Canal {channel_index} | Tubo: {tubing_diam_mm} mm")
+                print(f"---> [CONFIG] Canal {channel_index} | Tubo fijado en: {tubing_diam_mm} mm")
             except Exception as e:
                 logging.error(f"Error al configurar diámetro: {e}")
 
@@ -216,3 +231,38 @@ class IsmatecPump:
             # Al darle a parar, "apagamos" el interruptor de la barra de progreso de este canal para que se borre de pantalla
             if channel_index in self._stop_events:
                 self._stop_events[channel_index].set()
+    
+    # --- FUNCIÓN 6: DISPENSE_VOLUME ESPERANDO HASTA QUE ACABE ---
+    def dispense_volume_sync(self, channel_index: int = 1, volume_ml: float = 1.0, flow_rate_ml_min: float = 1.0, direction: str = "CW"):
+        """
+        Igual que dispense_volume, pero PAUSA la ejecución del script principal (IvoryOS) 
+        hasta que la dosificación termina por completo al 100%.
+        """
+        
+        if channel_index in self._stop_events:
+            self._stop_events[channel_index].set()
+            time.sleep(0.2) 
+            
+        stop_event = threading.Event()
+        self._stop_events[channel_index] = stop_event
+
+        if self.connection:
+            try:
+                self.send_command(f"{channel_index}xf1")
+                self.send_command(f"{channel_index}O")
+                
+                dir_cmd = "J" if direction == "CW" else "K"
+                self.send_command(f"{channel_index}{dir_cmd}")
+                
+                self.send_command(f"{channel_index}f{pack_volume2(flow_rate_ml_min)}")
+                self.send_command(f"{channel_index}v{pack_volume2(volume_ml)}")
+                self.send_command(f"{channel_index}H")
+                
+                tiempo_segundos = (volume_ml / flow_rate_ml_min) * 60
+                
+                # LA MAGIA ESTÁ AQUÍ: En vez de lanzarlo en un Thread secundario, 
+                # ejecutamos la barra en el hilo principal. Esto "bloquea" IvoryOS.
+                self._barra_fija_progreso(tiempo_segundos, volume_ml, stop_event, channel_index)
+                
+            except Exception as e:
+                logging.error(f"Error al dispensar volumen síncrono: {e}")
