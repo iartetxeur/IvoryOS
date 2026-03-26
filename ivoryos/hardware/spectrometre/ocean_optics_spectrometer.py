@@ -4,7 +4,6 @@ import logging
 import seabreeze
 seabreeze.use('pyseabreeze')
 
-# Evita que el programa intente abrir ventanas gráficas y falle al cerrar
 import matplotlib
 matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
@@ -63,9 +62,9 @@ class OceanOpticsSpectrometer:
         csv_path = os.path.join(target_dir, f"DATA_{prefix}_{file_time}.csv")
         with open(csv_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['Wavelength (nm)', 'Intensity', 'IntegrationTime', 'Scans'])
+            writer.writerow(['Wavelength (nm)', 'Intensity'])
             for w, i in zip(self.wavelengths, intensities):
-                writer.writerow([w, i, integration_time_micros, num_scans])
+                writer.writerow([w, i])
 
     def take_baseline(self, integration_time_micros: int = 100000, num_scans: int = 5):
         """Mide el blanco. Solo funciona si el USB está conectado."""

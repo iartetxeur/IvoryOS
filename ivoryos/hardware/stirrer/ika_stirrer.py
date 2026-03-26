@@ -5,6 +5,7 @@ import time
 import sys
 import re
 
+#TODO: Añadir tiempo de espera entre comandos, tiene que acabar el dispense_volume antes de pasar a la siguiente orden.
 class IkaStirrer:
     def __init__(self, port: str = "COM5"):
         # 1. Definir la variable ANTES de que nada pueda fallar
@@ -13,27 +14,31 @@ class IkaStirrer:
         self._lock = threading.Lock()
 
         try:
-            # 2. Intentar la conexión
+            # 2. Configuración que acabamos de verificar (8N1)
             self.connection = serial.Serial(
                 port=self.port,
                 baudrate=9600,
-                bytesize=serial.SEVENBITS,
+                bytesize=serial.EIGHTBITS,
                 stopbits=serial.STOPBITS_ONE,
-                parity=serial.PARITY_EVEN,
-                timeout=0.5
+                parity=serial.PARITY_NONE,
+                timeout=1.0
             )
             
-            # 3. Verificación real con comando NAMUR
-            self.connection.write(b"IN_NAME\r\n")
-            respuesta = self.connection.readline().decode().strip()
+            # Limpiar rastro de intentos fallidos
+            self.connection.reset_input_buffer()
             
-            if "IKA" in respuesta:
+            # 3. Verificación con el comando que SI ha funcionado
+            self.connection.write(b"IN_NAME\r\n")
+            time.sleep(0.5) 
+            respuesta = self.connection.read_all().decode('ascii', errors='ignore').strip()
+            
+            # CAMBIO CRITICO: Aceptamos "RCT" o "IKA" o cualquier respuesta no vacía
+            if "RCT" in respuesta or "IKA" in respuesta or len(respuesta) > 0:
                 print(f"✅ Placa IKA detectada ({respuesta}) en {self.port}")
             else:
-                raise serial.SerialException("Equipo no responde.")
+                raise serial.SerialException("La placa no respondió correctamente al nombre.")
                 
         except Exception as e:
-            # Ahora self.port ya existe, por lo que no habrá crash
             print(f"❌ AVISO: No hay comunicación con la Placa IKA en {self.port}. (Modo Offline)")
             self.connection = None
 

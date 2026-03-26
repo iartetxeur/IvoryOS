@@ -23,4 +23,6 @@ if __name__ == "__main__":
         if hasattr(pump_1, 'connection') and pump_1.connection: pump_1.connection.close()
         if hasattr(pump_2, 'connection') and pump_2.connection: pump_2.connection.close()
         if hasattr(ika_stirrer, 'connection') and ika_stirrer.connection: ika_stirrer.connection.close()
+        if 'ocean_optics_spectrometer' in locals():
+            del ocean_optics_spectrometer 
         sys.exit(0)
