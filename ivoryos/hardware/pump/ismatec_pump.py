@@ -9,7 +9,7 @@ try:
     from .channel import Channel
 except ImportError:
     pass
-# --- CREAR LA LISTA CERRADA PARA LA INTERFAZ DE IVORYOS ---
+# --- LISTA DE DIÁMETROS DE TUBO ---
 class TubingDiameter(Enum):
     Tube_0_13_mm = 0.13
     Tube_0_19_mm = 0.19
@@ -128,7 +128,6 @@ class IsmatecPump:
         Despliega la lista para elegir un valor preprogramado de fábrica.
         """
         # 1. Extraer el valor numérico (float) del Enum que eligió el usuario en la interfaz
-        # (Si por algún motivo llega como texto o float desde otro lado, lo manejamos)
         if isinstance(tubing_diam, TubingDiameter):
             tubing_diam_mm = tubing_diam.value
         else:

@@ -6,12 +6,12 @@ import ivoryos
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
 from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
 from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer
+from ivoryos.hardware.chopper.thorlabs_chopper import ThorlabsChopper
 
 # ==========================================
 # --- SISTEMA DE SELECCIÓN DE DECK ---
 # ==========================================
 
-# Por defecto, si no le decimos nada al arrancar, cargará el deck "sintesis"
 deck_seleccionado = "sintesis"
 
 # Si le pasamos un argumento por consola (ej: python -m ivoryos.main analisis)
@@ -35,6 +35,7 @@ if deck_seleccionado == "sintesis":
     pump_1 = IsmatecPump(port="COM8")
     pump_2 = IsmatecPump(port="COM9")
     ika_stirrer = IkaStirrer(port="COM5")
+    chopper_optico = ThorlabsChopper(port="COM6")
 
 elif deck_seleccionado == "analisis":
     print("[INFO] Cargando hardware de Análisis Óptico...")
@@ -47,6 +48,8 @@ elif deck_seleccionado == "todo":
     pump_2 = IsmatecPump(port="COM9")
     ika_stirrer = IkaStirrer(port="COM5")
     ocean_optics_spectrometer = OceanOpticsSpectrometer()
+    chopper_optico = ThorlabsChopper(port="COM13")
+
 
 elif deck_seleccionado == "simulacion":
     print("[INFO] Cargando en Modo Simulación (Deck vacío para programar en casa)...")
