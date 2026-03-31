@@ -5,6 +5,8 @@ from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
 from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
 from ivoryos.hardware.chopper.thorlabs_chopper import ThorlabsChopper
+from ivoryos.hardware.pico.g2v_pico import G2VPicoLight
+
 
 print("🚀 INICIALIZANDO DECK: SÍNTESIS")
 
@@ -14,6 +16,8 @@ pump_2 = IsmatecPump(port="COM9")
 ika_stirrer = IkaStirrer(port="COM5")
 ocean_optics_spectrometer = OceanOpticsSpectrometer()
 thorlabs_chopper = ThorlabsChopper(port="COM13")
+g2v_pico_light = G2VPicoLight(ip_address="", pico_id="")
+
 
 if __name__ == "__main__":
     try:
@@ -26,6 +30,7 @@ if __name__ == "__main__":
         if hasattr(pump_2, 'connection') and pump_2.connection: pump_2.connection.close()
         if hasattr(ika_stirrer, 'connection') and ika_stirrer.connection: ika_stirrer.connection.close()
         if hasattr(thorlabs_chopper, 'connection') and thorlabs_chopper.connection: thorlabs_chopper.connection.close()
+        if hasattr(g2v_pico_light, 'connection') and g2v_pico_light.connection: g2v_pico_light.connection.close()
         if 'ocean_optics_spectrometer' in locals():
             del ocean_optics_spectrometer 
         sys.exit(0)

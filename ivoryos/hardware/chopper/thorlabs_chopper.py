@@ -14,10 +14,10 @@ class ThorlabsChopper:
             # Los parámetros exactos de comunicación extraídos del archivo original
             self.connection = serial.Serial(
                 port=self.port,
-                baudrate=115200,                # Velocidad requerida por Thorlabs
-                bytesize=serial.EIGHTBITS,      # 8 bits de datos
-                parity=serial.PARITY_NONE,      # Sin paridad
-                stopbits=serial.STOPBITS_ONE,   # 1 bit de parada
+                baudrate=115200,                
+                bytesize=serial.EIGHTBITS,      
+                parity=serial.PARITY_NONE,      
+                stopbits=serial.STOPBITS_ONE,   
                 timeout=1.0
             )
             
