@@ -30,7 +30,7 @@ class OceanOpticsSpectrometer:
                 raise Exception("No devices found")
                 
         except Exception:
-            print("⚠️ AVISO: Espectrómetro Ocean Optics NO detectado. Trabajando en modo offline.")
+            print("❌ AVISO: Espectrómetro Ocean Optics NO detectado. Trabajando en modo offline.")
 
     def _get_target_dir(self):
         """Busca automáticamente la carpeta del experimento que IvoryOS acaba de crear."""

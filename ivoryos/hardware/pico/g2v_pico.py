@@ -4,6 +4,8 @@ import json
 import os
 from threading import Lock
 
+from ivoryos.hardware.pump import channel
+
 try:
     from g2vpico import G2VPico
 except ImportError:
@@ -144,3 +146,12 @@ class G2VPicoLight:
                     print("---> [PICO] Espectro cargado correctamente.")
                 except Exception as e:
                     raise ValueError(f"❌ Error al cargar el espectro: {e}")
+                
+    def get_channel_limit(self, channel: int) -> int:
+        """Returns the maximum PWM limit [0-4096] for a specific channel."""
+        if self.connection:
+            with self._lock:
+                if channel not in self.channel_list:
+                    raise ValueError(f"❌ Canal {channel} no existe en este Pico.")
+                return self.connection.get_channel_limit(channel)
+        return -1
