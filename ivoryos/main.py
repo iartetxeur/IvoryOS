@@ -106,6 +106,11 @@ _deck_module = importlib.import_module(f"ivoryos.decks.deck_{deck_seleccionado}"
 for _nombre_hw in getattr(_deck_module, "__all__", []):
     globals()[_nombre_hw] = getattr(_deck_module, _nombre_hw)
 
+# Hacer que IvoryOS guarde el nombre del deck correcto en los experimentos.
+# IvoryOS usa __main__.__file__ para obtener el nombre del deck al guardar.
+# Sin esto guarda "main" en vez del deck seleccionado (ej: "deck_sintesis").
+__file__ = _deck_module.__file__
+
 
 # =============================================================
 # ARRANQUE DEL SERVIDOR
