@@ -1,13 +1,3 @@
-"""
-IvoryOS - Punto de entrada principal
-=====================================
-Uso:
-    python -m ivoryos.main                  -> menu interactivo para elegir deck
-    python -m ivoryos.main sintesis         -> lanza directamente el deck de sintesis
-    python -m ivoryos.main analisis         -> lanza directamente el deck de analisis
-    python -m ivoryos.main todo             -> lanza todos los instrumentos
-    python -m ivoryos.main simulacion       -> lanza en modo offline (sin hardware)
-"""
 import sys
 import importlib
 import threading
@@ -37,7 +27,7 @@ DECKS = {
     },
     "4": {
         "nombre": "analisis_temperatura",
-        "descripcion": "Analisis Temp - Solo agitador IKA",
+        "descripcion": "Analisis Temp - IKA",
     },
     "5": {
         "nombre": "simulacion",
@@ -69,7 +59,7 @@ def _seleccionar_deck() -> str:
     # --- Menu interactivo ---
     ancho = 58
     print("\n" + "=" * ancho)
-    print("IVORYOS  -  Que deck quieres arrancar?")
+    print("IVORYOS  -  Selecciona un deck:")
     print("=" * ancho)
     for num, info in DECKS.items():
         print(f"   [{num}]  {info['descripcion']}")
@@ -107,8 +97,6 @@ for _nombre_hw in getattr(_deck_module, "__all__", []):
     globals()[_nombre_hw] = getattr(_deck_module, _nombre_hw)
 
 # Hacer que IvoryOS guarde el nombre del deck correcto en los experimentos.
-# IvoryOS usa __main__.__file__ para obtener el nombre del deck al guardar.
-# Sin esto guarda "main" en vez del deck seleccionado (ej: "deck_sintesis").
 __file__ = _deck_module.__file__
 
 
