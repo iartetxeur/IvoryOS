@@ -1,61 +1,37 @@
 # =============================================================
-# DECK: SÍNTESIS
-# Hardware para el reactor de síntesis de nanopartículas.
-# Este archivo es importado dinámicamente por main.py.
+# DECK: SINTESIS
+# Hardware para el reactor de sintesis de nanoparticulas.
+# Este archivo es importado dinamicamente por main.py.
 # NO ejecutar directamente.
 # =============================================================
-
-import threading as _threading
 
 from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
 from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer
+from ivoryos.decks.hw_config import (
+    PUMP_1_COM, PUMP_2_COM, IKA_COM,
+    SPEC_INTEGRATION_TIME, SPEC_NUM_SCANS,
+    _safe_init
+)
 
+print("[INFO] Cargando hardware de Sintesis...")
 
-def _safe_init(clase, *args, timeout_s=8.0, **kwargs):
-    """
-    Inicializa un objeto de hardware en un hilo separado con timeout.
-    Si tarda más de timeout_s segundos, devuelve None y continúa.
-    """
-    resultado = [None]
+pump_1                    = _safe_init(IsmatecPump,             port=PUMP_1_COM)
+pump_2                    = _safe_init(IsmatecPump,             port=PUMP_2_COM)
+ocean_optics_spectrometer = _safe_init(OceanOpticsSpectrometer, integration_time_micros=SPEC_INTEGRATION_TIME, num_scans=SPEC_NUM_SCANS)
 
-    def _init():
-        try:
-            resultado[0] = clase(*args, **kwargs)
-        except Exception:
-            pass
+# IKA se inicializa directamente (sin hilo daemon) para que pyserial
+# funcione correctamente desde los hilos de Flask en Windows
+try:
+    ika_stirrer = IkaStirrer(port=IKA_COM)
+except Exception as e:
+    print(f"IKA Stirrer no disponible en {IKA_COM}: {e}")
+    ika_stirrer = None
 
-    hilo = _threading.Thread(target=_init, daemon=True)
-    hilo.start()
-    hilo.join(timeout=timeout_s)
+print("[INFO] Hardware de Sintesis cargado.")
 
-    if hilo.is_alive():
-        nombre = getattr(clase, "__name__", str(clase))
-        print(f"⏱️  TIMEOUT ({timeout_s}s): {nombre} no responde — continuando en Modo Offline.")
-
-    return resultado[0]
-
-
-# ------------------------------------------------------------------
-# INICIALIZACIÓN DEL HARDWARE
-# ------------------------------------------------------------------
-print("[INFO] Cargando hardware de Síntesis...")
-
-pump_1                    = _safe_init(IsmatecPump,             port="COM10")
-pump_2                    = _safe_init(IsmatecPump,             port="COM12")
-ika_stirrer               = _safe_init(IkaStirrer,               port="COM11")
-ocean_optics_spectrometer = _safe_init(OceanOpticsSpectrometer, integration_time_micros=100000, num_scans=5)
-
-print("[INFO] Hardware de Síntesis cargado.")
-
-# ------------------------------------------------------------------
-# HARDWARE_OBJECTS: para cerrar puertos al apagar
-# ------------------------------------------------------------------
 HARDWARE_OBJECTS = [obj for obj in [pump_1, pump_2, ika_stirrer] if obj is not None]
 
-# ------------------------------------------------------------------
-# __all__: variables inyectadas en el namespace de main.py
-# ------------------------------------------------------------------
 __all__ = [
     "pump_1",
     "pump_2",

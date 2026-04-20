@@ -1,25 +1,28 @@
 # =============================================================
-# DECK: ANÁLISIS ÓPTICO
-# Hardware para medidas espectroscópicas.
-# Este archivo es importado dinámicamente por main.py.
+# DECK: ANALISIS OPTICO
+# Hardware para medidas espectroscopicas.
+# Este archivo es importado dinamicamente por main.py.
 # NO ejecutar directamente.
 # =============================================================
 
 from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer
+from ivoryos.decks.hw_config import SPEC_INTEGRATION_TIME, SPEC_NUM_SCANS
 
-print("[INFO] Cargando hardware de Análisis Óptico...")
+print("[INFO] Cargando hardware de Analisis Optico...")
 
-ocean_optics_spectrometer = OceanOpticsSpectrometer(integration_time_micros=100000, num_scans=5)
-# chopper_optico = ThorlabsChopper(port="COM10")  # Descomentar cuando lo uses
-
-# ------------------------------------------------------------------
-# HARDWARE_OBJECTS: lista usada por main.py para cerrar los puertos
-# al apagar el servidor.
-# ------------------------------------------------------------------
-HARDWARE_OBJECTS = []  # El espectrómetro Ocean Optics no usa puerto serial clásico
+ocean_optics_spectrometer = OceanOpticsSpectrometer(
+    integration_time_micros=SPEC_INTEGRATION_TIME,
+    num_scans=SPEC_NUM_SCANS
+)
+# chopper_optico = ThorlabsChopper(port=CHOPPER_COM)  # Descomentar cuando lo uses
 
 # ------------------------------------------------------------------
-# __all__: variables que se inyectarán en el namespace de main.py
+# HARDWARE_OBJECTS
+# ------------------------------------------------------------------
+HARDWARE_OBJECTS = []  # El espectrometro Ocean Optics no usa puerto serial clasico
+
+# ------------------------------------------------------------------
+# __all__
 # ------------------------------------------------------------------
 __all__ = [
     "ocean_optics_spectrometer",

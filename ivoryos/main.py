@@ -12,6 +12,8 @@ import sys
 import importlib
 import threading
 import webbrowser
+import socket
+import time
 import ivoryos
 
 
@@ -34,6 +36,10 @@ DECKS = {
         "descripcion": "Todo          - Todo el hardware del laboratorio",
     },
     "4": {
+        "nombre": "analisis_temperatura",
+        "descripcion": "Analisis Temp - Solo agitador IKA",
+    },
+    "5": {
         "nombre": "simulacion",
         "descripcion": "Simulacion    - Sin hardware real (para programar en casa)",
     },
@@ -71,7 +77,7 @@ def _seleccionar_deck() -> str:
 
     while True:
         try:
-            eleccion = input("\n   Introduce el numero (1-4): ").strip()
+            eleccion = input("\n   Introduce el numero (1-5): ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\n\n[INFO] Cancelado por el usuario.")
             sys.exit(0)
@@ -79,7 +85,7 @@ def _seleccionar_deck() -> str:
         if eleccion in DECKS:
             return DECKS[eleccion]["nombre"]
 
-        print("   Opcion no valida. Elige entre 1 y 4.")
+        print("   Opcion no valida. Elige entre 1 y 5.")
 
 
 # =============================================================
@@ -106,9 +112,17 @@ for _nombre_hw in getattr(_deck_module, "__all__", []):
 # =============================================================
 if __name__ == "__main__":
     try:
-        # Abrir el navegador en un hilo aparte tras 3 segundos
-        # (tiempo para que el servidor Flask arranque)
-        threading.Timer(3.0, lambda: webbrowser.open("http://localhost:8000")).start()
+        # Abrir el navegador en cuanto el servidor este listo
+        def _abrir_cuando_listo():
+            for _ in range(30):  # espera max 15 segundos
+                try:
+                    s = socket.create_connection(("localhost", 8000), timeout=0.5)
+                    s.close()
+                    webbrowser.open("http://localhost:8000")
+                    return
+                except OSError:
+                    time.sleep(0.5)
+        threading.Thread(target=_abrir_cuando_listo, daemon=True).start()
 
         ivoryos.run(__name__, debug=False)
 
@@ -125,7 +139,6 @@ if __name__ == "__main__":
                 conn = getattr(_hw, "connection", None)
                 if conn and getattr(conn, "is_open", False):
                     conn.close()
-                    print(f"   Puerto COM liberado: {type(_hw).__name__}")
             except Exception as e:
                 print(f"   Error cerrando {type(_hw).__name__}: {e}")
 
