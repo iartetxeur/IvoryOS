@@ -1,29 +1,45 @@
-# BO platform
-# ax-platform==1.1.2
+# =============================================================
+# IvoryOS - Dependencias
+# Instalar con: pip install -r requirements.txt
+# Luego instalar el paquete en modo editable: pip install -e .
+# =============================================================
 
-# Flask and SQL
-bcrypt==4.0.1
+# --- Flask y servidor web ---
+Flask[async]
 Flask-Login
 Flask-Session
 Flask-SocketIO
 Flask-SQLAlchemy
-SQLAlchemy-Utils~=0.41
+Flask-WTF
 wtforms~=3.2.1
-flask-wtf
-pandas
+python-engineio
+python-socketio
+simple-websocket
 
-# connect to PostgreSQL
+# --- Base de datos ---
+SQLAlchemy
+SQLAlchemy-Utils~=0.41
+bcrypt==4.0.1
+
+# --- Datos y utilidades ---
+pandas
+python-dotenv
+openai
+
+# --- Hardware serial ---
+pyserial==3.5
+seabreeze==2.11.0
+pyusb==1.3.1
+g2vpico==1.0.9
+
+# =============================================================
+# OPCIONALES - Descomenta lo que necesites
+# =============================================================
+
+# Base de datos PostgreSQL (en vez de SQLite)
 # psycopg2-binary
 
-# LLM host
-# ollama
-openai
-python-dotenv
-
-# hardware api (optional)
-# hein-robots==0.5.3
-# ika==1.16.0
-# new-era==2.2.3
-# north-devices==0.3.5
-# vapourtec==1.2.1
-# optommp==0.4  #PLC
+# Optimizadores (instalan PyTorch y otras librerias pesadas ~2GB)
+# ax-platform>=1.1.2
+# baybe>=0.14.0
+# nimo>=2.0.5
