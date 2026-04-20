@@ -4,6 +4,41 @@ import threading
 import time
 import re
 
+
+def _abrir_puerto_con_timeout(parametros: dict, timeout_s: float = 4.0):
+    """
+    Intenta abrir un puerto serial en un hilo separado con timeout.
+    Evita el cuelgue indefinido que ocurre en Windows cuando un puerto COM
+    existe (ej. adaptador USB-Serie) pero no tiene el dispositivo correcto.
+
+    :param parametros: diccionario de kwargs para serial.Serial()
+    :param timeout_s: segundos máximos de espera antes de abortar
+    :raises TimeoutError: si el puerto no responde en tiempo
+    :raises Exception: cualquier otro error de conexión
+    """
+    resultado = {"conn": None, "error": None}
+
+    def _conectar():
+        try:
+            resultado["conn"] = serial.Serial(**parametros)
+        except Exception as exc:
+            resultado["error"] = exc
+
+    hilo = threading.Thread(target=_conectar, daemon=True)
+    hilo.start()
+    hilo.join(timeout=timeout_s)
+
+    if hilo.is_alive():
+        # El hilo sigue bloqueado → el puerto está colgado
+        raise TimeoutError(
+            f"Timeout ({timeout_s}s) al abrir el puerto. "
+            "El puerto existe en Windows pero no responde (dispositivo no conectado)."
+        )
+    if resultado["error"]:
+        raise resultado["error"]
+    return resultado["conn"]
+
+
 class ThorlabsChopper:
     def __init__(self, port: str = "COM6"):
         self.port = port
@@ -11,26 +46,26 @@ class ThorlabsChopper:
         self._lock = threading.Lock()
 
         try:
-            # Los parámetros exactos de comunicación extraídos del archivo original
-            self.connection = serial.Serial(
-                port=self.port,
-                baudrate=115200,                
-                bytesize=serial.EIGHTBITS,      
-                parity=serial.PARITY_NONE,      
-                stopbits=serial.STOPBITS_ONE,   
-                timeout=1.0
-            )
-            
+            # Usamos la función con timeout para no quedarnos colgados en Windows
+            self.connection = _abrir_puerto_con_timeout({
+                "port":     self.port,
+                "baudrate": 115200,
+                "bytesize": serial.EIGHTBITS,
+                "parity":   serial.PARITY_NONE,
+                "stopbits": serial.STOPBITS_ONE,
+                "timeout":  1.0,
+            }, timeout_s=4.0)
+
             # Limpiar el buffer mandando un 'Carriage Return' inicial
             self.connection.write(b"\r")
             time.sleep(0.1)
             self.connection.reset_input_buffer()
-            
+
             # Verificación de estado pidiendo la frecuencia interna
             self.connection.write(b"freq?\r")
             time.sleep(0.1)
             respuesta = self.connection.read_all().decode('ascii', errors='ignore')
-            
+
             if "freq=" in respuesta.lower() or len(respuesta) > 2:
                 print(f"✅ Chopper Thorlabs conectado correctamente en {port}")
                 logging.info(f"CHOPPER - Conectado en {port}")

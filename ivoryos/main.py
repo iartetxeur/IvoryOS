@@ -1,84 +1,127 @@
+"""
+IvoryOS - Punto de entrada principal
+=====================================
+Uso:
+    python -m ivoryos.main                  → menú interactivo para elegir deck
+    python -m ivoryos.main sintesis         → lanza directamente el deck de síntesis
+    python -m ivoryos.main analisis         → lanza directamente el deck de análisis
+    python -m ivoryos.main todo             → lanza todos los instrumentos
+    python -m ivoryos.main simulacion       → lanza en modo offline (sin hardware)
+"""
 import sys
-import logging
+import importlib
 import ivoryos
 
-# --- IMPORTACIONES DE HARDWARE ---
-from ivoryos.hardware.spectrometre.ocean_optics_spectrometer import OceanOpticsSpectrometer 
-from ivoryos.hardware.pump.ismatec_pump import IsmatecPump
-from ivoryos.hardware.stirrer.ika_stirrer import IkaStirrer
-from ivoryos.hardware.chopper.thorlabs_chopper import ThorlabsChopper
 
-# ==========================================
-# --- SISTEMA DE SELECCIÓN DE DECK ---
-# ==========================================
+# =============================================================
+# CONFIGURACIÓN DE DECKS DISPONIBLES
+# Para añadir un nuevo deck: crea ivoryos/decks/deck_NOMBRE.py
+# y añade una entrada aquí.
+# =============================================================
+DECKS = {
+    "1": {
+        "nombre": "sintesis",
+        "descripcion": "Síntesis      — Bombas, IKA, Espectrómetro",
+    },
+    "2": {
+        "nombre": "analisis",
+        "descripcion": "Análisis      — Espectrómetro Ocean Optics",
+    },
+    "3": {
+        "nombre": "todo",
+        "descripcion": "Todo          — Todo el hardware del laboratorio",
+    },
+    "4": {
+        "nombre": "simulacion",
+        "descripcion": "Simulación    — Sin hardware real (para programar en casa)",
+    },
+}
 
-deck_seleccionado = "sintesis"
-
-# Si le pasamos un argumento por consola (ej: python -m ivoryos.main analisis)
-if len(sys.argv) > 1:
-    # Usamos [-1] para coger el último argumento de forma segura, 
-    # por si Python añade argumentos extra como el '-m'
-    argumento = sys.argv[-1].lower()
-    if argumento in ["sintesis", "analisis", "todo", "simulacion"]:
-        deck_seleccionado = argumento
-
-print(f"\n{'='*50}")
-print(f"🚀 INICIALIZANDO IVORYOS - DECK: {deck_seleccionado.upper()}")
-print(f"{'='*50}\n")
-
-# ==========================================
-# --- CONFIGURACIÓN DE LOS DECKS ---
-# ==========================================
-
-if deck_seleccionado == "sintesis":
-    print("[INFO] Cargando hardware de Síntesis...")
-    pump_1 = IsmatecPump(port="COM8")
-    pump_2 = IsmatecPump(port="COM9")
-    ika_stirrer = IkaStirrer(port="COM5")
-    chopper_optico = ThorlabsChopper(port="COM6")
-
-elif deck_seleccionado == "analisis":
-    print("[INFO] Cargando hardware de Análisis Óptico...")
-    ocean_optics_spectrometer = OceanOpticsSpectrometer(integration_time_micros=100000, num_scans=5)
-    # chopper_optico = ThorlabsChopper(port="COM10") # Descomentar cuando lo uses
-
-elif deck_seleccionado == "todo":
-    print("[INFO] Cargando TODO el hardware disponible...")
-    pump_1 = IsmatecPump(port="COM8")
-    pump_2 = IsmatecPump(port="COM9")
-    ika_stirrer = IkaStirrer(port="COM5")
-    ocean_optics_spectrometer = OceanOpticsSpectrometer()
-    chopper_optico = ThorlabsChopper(port="COM13")
+_NOMBRES_VALIDOS = {info["nombre"] for info in DECKS.values()}
 
 
-elif deck_seleccionado == "simulacion":
-    print("[INFO] Cargando en Modo Simulación (Deck vacío para programar en casa)...")
-    pass # No iniciamos ningún hardware real
+# =============================================================
+# SELECCIÓN DEL DECK
+# =============================================================
+def _seleccionar_deck() -> str:
+    """
+    Devuelve el nombre del deck a cargar.
+    Prioridad: argumento de consola > menú interactivo.
+    """
+    # --- Argumento por línea de comandos ---
+    if len(sys.argv) > 1:
+        arg = sys.argv[-1].lower()
+        if arg in _NOMBRES_VALIDOS:
+            print(f"\n[INFO] Deck seleccionado por argumento: '{arg}'")
+            return arg
+        else:
+            print(f"\n[AVISO] Argumento '{arg}' no reconocido. "
+                  f"Opciones válidas: {', '.join(sorted(_NOMBRES_VALIDOS))}")
 
-# ==========================================
-# --- ARRANQUE DEL SERVIDOR ---
-# ==========================================
+    # --- Menú interactivo ---
+    ancho = 58
+    print("\n" + "=" * ancho)
+    print("IVORYOS  —  ¿Qué deck quieres arrancar?")
+    print("=" * ancho)
+    for num, info in DECKS.items():
+        print(f"   [{num}]  {info['descripcion']}")
+    print("=" * ancho)
 
+    while True:
+        try:
+            eleccion = input("\n   Introduce el número (1–4): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n[INFO] Cancelado por el usuario.")
+            sys.exit(0)
+
+        if eleccion in DECKS:
+            return DECKS[eleccion]["nombre"]
+
+        print("   ❌  Opción no válida. Elige entre 1 y 4.")
+
+
+# =============================================================
+# CARGA DEL DECK SELECCIONADO
+# =============================================================
+deck_seleccionado = _seleccionar_deck()
+
+print(f"\n{'=' * 58}")
+print(f"INICIALIZANDO DECK: {deck_seleccionado.upper()}")
+print(f"{'=' * 58}\n")
+
+# Importar el módulo del deck dinámicamente
+_deck_module = importlib.import_module(f"ivoryos.decks.deck_{deck_seleccionado}")
+
+# Inyectar el hardware del deck en el namespace de ESTE módulo (__main__)
+# Esto es imprescindible para que ivoryos.run(__name__) encuentre los
+# objetos de hardware a través de sys.modules["__main__"].
+for _nombre_hw in getattr(_deck_module, "__all__", []):
+    globals()[_nombre_hw] = getattr(_deck_module, _nombre_hw)
+
+
+# =============================================================
+# ARRANQUE DEL SERVIDOR
+# =============================================================
 if __name__ == "__main__":
     try:
-        # Arranca la web. ¡El modo Debug apagado para no silenciar los errores!
         ivoryos.run(__name__, debug=False)
-        
+
     except KeyboardInterrupt:
-        print("\n[INFO] Deteniendo el servidor por el usuario (Ctrl+C)...")
-        
+        print("\n\n[INFO] Deteniendo el servidor por Ctrl+C...")
+
     finally:
         print("\n[INFO] Cerrando conexiones de hardware de forma segura...")
-        
-        # Bucle inteligente que busca cualquier hardware que se haya abierto y cierra su puerto
-        for obj_name, obj in list(locals().items()):
-            if hasattr(obj, 'connection') and obj.connection:
-                if hasattr(obj.connection, 'is_open') and obj.connection.is_open:
-                    try:
-                        obj.connection.close()
-                        print(f" ✅ Puerto COM liberado para: {obj_name}")
-                    except Exception as e:
-                        print(f" ⚠️ Error cerrando {obj_name}: {e}")
-                        
-        print("👋 Sistema apagado correctamente.")
+        _hardware_list = getattr(_deck_module, "HARDWARE_OBJECTS", [])
+        for _hw in _hardware_list:
+            if _hw is None:
+                continue
+            try:
+                conn = getattr(_hw, "connection", None)
+                if conn and getattr(conn, "is_open", False):
+                    conn.close()
+                    print(f"   ✅ Puerto COM liberado: {type(_hw).__name__}")
+            except Exception as e:
+                print(f"   ⚠️  Error cerrando {type(_hw).__name__}: {e}")
+
+        print("\n[INFO] Sistema apagado correctamente.")
         sys.exit(0)

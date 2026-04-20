@@ -23,6 +23,10 @@ class G2VPicoLight:
             print("❌ AVISO: Librería 'g2vpico' no instalada. (Modo Offline)")
             return
 
+        if not self.ip_address:
+            print("❌ AVISO: G2V Pico sin IP configurada. (Modo Offline)")
+            return
+
         try:
             self.connection = G2VPico(self.ip_address, self.pico_id)
             # Guardamos la lista de canales disponibles (ej: [1, 2, 3...])

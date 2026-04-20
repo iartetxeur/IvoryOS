@@ -57,7 +57,7 @@ def pack_discrete2(number: float) -> str:
     return f"{int(round(number * 100)):04d}"
 
 class IsmatecPump:
-    def __init__(self, port: str = "COM8", baudrate: int = 9600):
+    def __init__(self, port: str = "COM10", baudrate: int = 9600):
         self.port = port
         self.baudrate = baudrate
         self.connection = None
